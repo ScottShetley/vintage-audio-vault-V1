@@ -2,14 +2,16 @@
 const express = require ('express');
 const AudioItem = require ('../models/AudioItem'); // Adjust path as per your project structure
 const {protect} = require ('../middleware/authMiddleware'); // Adjust path
-const multer = require ('multer'); // --- ADDED: Multer import ---
+const multer = require ('multer');
+const {Storage} = require ('@google-cloud/storage'); // --- ADDED: GCS Import ---
+const path = require ('path'); // --- ADDED: Path module for resolving key file path ---
 
 const router = express.Router ();
 
-// --- CONFIGURE MULTER (ADDED: Multer setup for file uploads) ---
-// Set up multer for handling file uploads
-// For now, we'll store files in memory. We'll integrate GCS later.
-const storage = multer.memoryStorage (); // Store file in memory as a Buffer
+// --- CONFIGURE MULTER ---
+// Multer is configured to store files in memory as buffers.
+// This is necessary before uploading to GCS.
+const storage = multer.memoryStorage ();
 const upload = multer ({
   storage: storage,
   limits: {fileSize: 5 * 1024 * 1024}, // Limit file size to 5MB (adjust as needed)
@@ -24,26 +26,74 @@ const upload = multer ({
 });
 // --- END MULTER CONFIG ---
 
-// Protect all routes in this file
+// --- CONFIGURE GOOGLE CLOUD STORAGE ---
+// Initialize GCS client with credentials from the key file.
+// The keyFilename path is resolved relative to the current file's directory (__dirname).
+// Ensure GCP_PROJECT_ID, GCS_BUCKET_NAME, and GCS_KEY_FILE_PATH are correctly set in your root .env
+const gcs = new Storage ({
+  projectId: process.env.GCP_PROJECT_ID,
+  keyFilename: path.join (__dirname, '..', process.env.GCS_KEY_FILE_PATH), // Go up to server/ then into gcpjson/filename
+});
+
+const bucket = gcs.bucket (process.env.GCS_BUCKET_NAME); // Your GCS bucket name
+
+// Helper function to upload a single file buffer to GCS
+const uploadFileToGCS = file => {
+  return new Promise ((resolve, reject) => {
+    if (!file) {
+      return resolve (null); // No file to upload
+    }
+
+    // Create a unique filename for the object in GCS
+    const newFileName = `${Date.now ()}-${file.originalname.replace (/ /g, '_')}`; // Replace spaces for URLs
+    const blob = bucket.file (newFileName); // Create a new blob (file) in the bucket
+
+    // Create a writable stream to upload the file buffer
+    const blobStream = blob.createWriteStream ({
+      resumable: false, // Set to false for smaller files, true for larger ones
+      metadata: {
+        contentType: file.mimetype, // Set the content type for the uploaded file
+      },
+      public: true, // Make the uploaded object publicly readable
+    });
+
+    // Handle errors during the upload process
+    blobStream.on ('error', err => {
+      console.error ('GCS Upload Stream Error:', err);
+      reject (err);
+    });
+
+    // Handle successful completion of the upload
+    blobStream.on ('finish', () => {
+      // Construct the public URL for the uploaded object
+      const publicUrl = `https://storage.googleapis.com/${bucket.name}/${blob.name}`;
+      resolve (publicUrl); // Resolve the promise with the public URL
+    });
+
+    // End the stream with the file's buffer, triggering the upload
+    blobStream.end (file.buffer);
+  });
+};
+// --- END GCS CONFIG ---
+
+// Protect all routes in this file with JWT authentication
 router.use (protect);
 
 // --- POST /api/items (Create new item) ---
-// Add 'upload.array('photos', 5)' middleware to parse multipart/form-data
-// 'photos' is the field name from your frontend form, 5 is the max number of files
+// 'upload.array('photos', 5)' middleware parses multipart/form-data.
+// 'photos' is the field name from your frontend form, 5 is the max number of files.
 router.post ('/', upload.array ('photos', 5), async (req, res) => {
-  // --- MULTER APPLIED HERE ---
   try {
-    // With multer, text fields are in req.body, files are in req.files (an array of file objects)
+    // Destructure text fields from req.body (parsed by multer)
     const {
       make,
       model,
       itemType,
       condition,
-      isFullyFunctional, // This comes as a string 'true' or 'false' from FormData
+      isFullyFunctional, // Comes as a string 'true' or 'false' from FormData
       issuesDescription,
       specifications,
       notes,
-      photoUrls, // This will be undefined from FormData if not explicitly appended as a string
       purchaseDate,
       purchasePrice,
       userEstimatedValue,
@@ -53,7 +103,7 @@ router.post ('/', upload.array ('photos', 5), async (req, res) => {
     // Convert isFullyFunctional from string to boolean
     const parsedIsFullyFunctional = isFullyFunctional === 'true';
 
-    // Basic validation (Mongoose schema will also validate)
+    // Basic validation for required fields
     if (
       !make ||
       !model ||
@@ -67,25 +117,39 @@ router.post ('/', upload.array ('photos', 5), async (req, res) => {
       });
     }
 
+    // --- UPLOAD NEW PHOTOS TO GCS ---
+    const photoUrls = [];
+    // req.files contains the file buffers from multer
+    if (req.files && req.files.length > 0) {
+      // Map each file to an upload promise and wait for all to complete
+      const uploadPromises = req.files.map (file => uploadFileToGCS (file));
+      const uploadedUrls = await Promise.all (uploadPromises);
+      // Filter out any nulls (failed uploads) and add successful URLs
+      photoUrls.push (...uploadedUrls.filter (url => url !== null));
+    }
+    // --- END UPLOAD NEW PHOTOS TO GCS ---
+
+    // Create a new AudioItem document in MongoDB
     const newItem = await AudioItem.create ({
       user: req.user._id, // Associate item with the logged-in user
       make,
       model,
       itemType,
       condition,
-      isFullyFunctional: parsedIsFullyFunctional, // Use the parsed boolean value
+      isFullyFunctional: parsedIsFullyFunctional,
       issuesDescription: parsedIsFullyFunctional
         ? undefined
         : issuesDescription, // Only save if not fully functional
       specifications,
       notes,
-      photoUrls: [], // Temporarily set to empty array. GCS upload logic will populate this later.
+      photoUrls: photoUrls, // Save the GCS public URLs
       purchaseDate,
       purchasePrice,
       userEstimatedValue,
       userEstimatedValueDate,
     });
 
+    // Send success response with the new item
     res.status (201).json ({
       status: 'success',
       data: {
@@ -94,12 +158,12 @@ router.post ('/', upload.array ('photos', 5), async (req, res) => {
     });
   } catch (error) {
     console.error ('CREATE ITEM ERROR:', error);
+    // Handle specific error types
     if (error.name === 'ValidationError') {
       return res
         .status (400)
         .json ({status: 'fail', message: error.message, errors: error.errors});
     }
-    // Handle multer errors specifically (e.g., file size limit, invalid file type)
     if (error instanceof multer.MulterError) {
       return res
         .status (400)
@@ -109,9 +173,9 @@ router.post ('/', upload.array ('photos', 5), async (req, res) => {
         });
     }
     if (error.message === 'Only image files are allowed!') {
-      // Custom error from fileFilter
       return res.status (400).json ({status: 'fail', message: error.message});
     }
+    // Generic server error
     res
       .status (500)
       .json ({status: 'error', message: 'Server error while creating item.'});
@@ -123,7 +187,7 @@ router.get ('/', async (req, res) => {
   try {
     const items = await AudioItem.find ({user: req.user._id}).sort ({
       createdAt: -1,
-    }); // Sort by newest
+    }); // Sort by newest first
     res.status (200).json ({
       status: 'success',
       results: items.length,
@@ -176,17 +240,21 @@ router.get ('/:id', async (req, res) => {
 });
 
 // --- PUT /api/items/:id (Update item by ID) ---
+// 'upload.array('photos', 5)' middleware parses multipart/form-data for new photos
 router.put ('/:id', upload.array ('photos', 5), async (req, res) => {
-  // --- MULTER APPLIED HERE ---
   try {
-    // With multer, text fields are in req.body, files are in req.files
-    // We still destructure updateData from req.body
-    const {user, photoUrls, isFullyFunctional, ...updateData} = req.body; // --- MODIFIED: Added isFullyFunctional to destructure ---
+    // Destructure text fields from req.body (parsed by multer)
+    // existingPhotoUrls will come as a JSON string from the frontend
+    const {
+      user,
+      isFullyFunctional,
+      existingPhotoUrls,
+      ...updateData
+    } = req.body;
 
     // Convert isFullyFunctional from string to boolean if it exists in req.body
     if (typeof isFullyFunctional !== 'undefined') {
       updateData.isFullyFunctional = isFullyFunctional === 'true';
-      // Handle issuesDescription conditionally based on the new isFullyFunctional value
       if (!updateData.isFullyFunctional) {
         updateData.issuesDescription = req.body.issuesDescription;
       } else {
@@ -214,10 +282,23 @@ router.put ('/:id', upload.array ('photos', 5), async (req, res) => {
         });
     }
 
-    // Note: photoUrls from frontend's FormData are not processed into DB yet.
-    // This part will be handled when GCS integration is done.
-    // For now, if photoUrls were sent, they are ignored by this update.
+    // --- Handle existing photos (from frontend's existingPhotoUrls array) ---
+    // Parse the JSON string of existing photo URLs back into an array.
+    // This array represents the photos the user *kept* on the frontend.
+    let currentPhotoUrls = JSON.parse (existingPhotoUrls || '[]');
 
+    // --- Upload new photos to GCS for update ---
+    // req.files contains the new file buffers from multer
+    if (req.files && req.files.length > 0) {
+      const uploadPromises = req.files.map (file => uploadFileToGCS (file));
+      const uploadedUrls = await Promise.all (uploadPromises);
+      currentPhotoUrls.push (...uploadedUrls.filter (url => url !== null)); // Add only successful new uploads
+    }
+
+    // Update the photoUrls field in the database with the combined list
+    updateData.photoUrls = currentPhotoUrls;
+
+    // Find and update the AudioItem document
     item = await AudioItem.findByIdAndUpdate (req.params.id, updateData, {
       new: true, // Return the modified document rather than the original
       runValidators: true, // Ensure schema validations are run on update
@@ -236,7 +317,6 @@ router.put ('/:id', upload.array ('photos', 5), async (req, res) => {
         .status (400)
         .json ({status: 'fail', message: 'Invalid item ID format.'});
     }
-    // Handle multer errors specifically (e.g., file size limit, invalid file type)
     if (error instanceof multer.MulterError) {
       return res
         .status (400)
@@ -246,7 +326,6 @@ router.put ('/:id', upload.array ('photos', 5), async (req, res) => {
         });
     }
     if (error.message === 'Only image files are allowed!') {
-      // Custom error from fileFilter
       return res.status (400).json ({status: 'fail', message: error.message});
     }
     res
@@ -255,6 +334,7 @@ router.put ('/:id', upload.array ('photos', 5), async (req, res) => {
   }
 });
 
+// --- DELETE /api/items/:id (Delete item by ID) ---
 router.delete ('/:id', async (req, res) => {
   try {
     const item = await AudioItem.findById (req.params.id);
@@ -276,6 +356,11 @@ router.delete ('/:id', async (req, res) => {
           message: 'You are not authorized to delete this item.',
         });
     }
+
+    // --- OPTIONAL: Delete images from GCS when item is deleted ---
+    // This is more advanced. For now, we'll just delete the DB record.
+    // If item.photoUrls exists, you would loop through them and call gcs.bucket.file(filename).delete()
+    // For now, we'll skip this to keep it simpler.
 
     await AudioItem.findByIdAndDelete (req.params.id);
 
