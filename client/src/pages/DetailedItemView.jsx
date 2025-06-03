@@ -7,9 +7,16 @@ const DetailedItemView = () => {
   const navigate = useNavigate();
   const { id } = useParams(); // Get item ID from URL
   const [item, setItem] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(true); // For initial item fetch
+  const [error, setError] = useState(null); // For item fetch errors
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  
+  // --- ADDED: AI Feature States ---
+  const [aiLoading, setAiLoading] = useState(false); // For AI call loading
+  const [aiError, setAiError] = useState(null);     // For AI call errors
+  const [aiValueInsight, setAiValueInsight] = useState(null);
+  const [aiSuggestions, setAiSuggestions] = useState(null);
+  // --- END ADDED AI Feature States ---
 
   // Placeholder image URL for items without photos
   const placeholderImageUrl = 'https://placehold.co/300x200/2C2C2C/E0E0E0?text=No+Image';
@@ -97,9 +104,87 @@ const DetailedItemView = () => {
     setError(null); // Clear any error from confirmation attempt
   };
 
+  // --- ADDED: AI Feature Handlers ---
+  const handleGetAiValueInsight = async () => {
+    setAiLoading(true);
+    setAiError(null);
+    setAiValueInsight(null); // Clear previous insight
+    const token = localStorage.getItem('token');
+
+    if (!token) {
+      setAiError('Authorization token not found. Please login.');
+      setAiLoading(false);
+      navigate('/login');
+      return;
+    }
+
+    try {
+      // Pass item.photoUrls in the request body
+      const response = await axios.post(`http://localhost:5000/api/items/${id}/ai-value`, {
+        photoUrls: item.photoUrls // Pass the item's photo URLs
+      }, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      setAiValueInsight(response.data.data.aiValueInsight);
+    } catch (err) {
+      console.error('Failed to get AI value insight:', err);
+      if (err.response && (err.response.status === 401 || err.response.status === 403)) {
+        localStorage.removeItem('token');
+        navigate('/login');
+      } else if (err.response && err.response.status === 429) { // Rate limit error
+        setAiError('AI service is busy. Please try again in a moment.');
+      } else {
+        setAiError(err.response?.data?.message || 'Failed to get AI value insight. Please try again.');
+      }
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const handleGetAiSuggestions = async () => {
+    setAiLoading(true);
+    setAiError(null);
+    setAiSuggestions(null); // Clear previous suggestions
+    const token = localStorage.getItem('token');
+
+    if (!token) {
+      setAiError('Authorization token not found. Please login.');
+      setAiLoading(false);
+      navigate('/login');
+      return;
+    }
+
+    try {
+      // Pass item.photoUrls in the request body
+      const response = await axios.post(`http://localhost:5000/api/items/${id}/ai-suggest-gear`, {
+        photoUrls: item.photoUrls // Pass the item's photo URLs
+      }, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      setAiSuggestions(response.data.data.aiSuggestions);
+    } catch (err) {
+      console.error('Failed to get AI suggestions:', err);
+      if (err.response && (err.response.status === 401 || err.response.status === 403)) {
+        localStorage.removeItem('token');
+        navigate('/login');
+      } else if (err.response && err.response.status === 429) { // Rate limit error
+        setAiError('AI service is busy. Please try again in a moment.');
+      } else {
+        setAiError(err.response?.data?.message || 'Failed to get AI suggestions. Please try again.');
+      }
+    } finally {
+      setAiLoading(false);
+    }
+  };
+  // --- END ADDED AI Feature Handlers ---
+
   useEffect(() => {
     fetchItemDetails();
-  }, [id]); // Re-fetch if ID changes
+  }, [id, navigate]);
 
   if (loading && !item) {
     return (
@@ -140,25 +225,22 @@ const DetailedItemView = () => {
   }
 
   return (
-    // This div is the main container for the page's content.
-    // It will be centered by the <main> tag in App.jsx.
-    // We apply max-w-4xl to this div, and mx-auto to center it within the <main> tag's available space.
     <div className="w-full max-w-4xl mx-auto p-4">
       <div className="bg-vav-content-card shadow-xl rounded-lg p-6 md:p-8">
         {/* Header section: Stacks on mobile, side-by-side on medium screens and up */}
-        <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4"> {/* MODIFIED CLASSES */}
-          <h1 className="text-3xl font-serif text-vav-accent-primary text-center md:text-left"> {/* Centered on mobile, left on md+ */}
+        <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+          <h1 className="text-3xl font-serif text-vav-accent-primary text-center md:text-left">
             {item.make} {item.model}
           </h1>
           <Link
             to="/dashboard"
-            className="text-vav-accent-primary hover:text-vav-accent-secondary transition-colors text-center md:text-right" /* Centered on mobile, right on md+ */
+            className="text-vav-accent-primary hover:text-vav-accent-secondary transition-colors text-center md:text-right"
           >
             &larr; Back to Dashboard
           </Link>
         </div>
 
-        {error && (
+        {error && ( // Error from item fetch (e.g., 404, 500)
           <p className="text-red-500 text-sm mb-4 text-center bg-red-900 bg-opacity-30 p-2 rounded">{error}</p>
         )}
 
@@ -173,7 +255,7 @@ const DetailedItemView = () => {
                   <img
                     key={index}
                     src={url}
-                    alt={`${item.make} ${item.model} photo ${index + 1}`}
+                    alt={`${item.make} ${item.model}`}
                     className="w-full h-32 object-cover rounded-md shadow-sm"
                     onError={(e) => { e.target.onerror = null; e.target.src = placeholderImageUrl; }}
                   />
@@ -251,6 +333,63 @@ const DetailedItemView = () => {
                   <p className="text-vav-text whitespace-pre-wrap">{item.notes}</p>
                 </div>
               )}
+            </div>
+          )}
+        </div>
+
+        {/* AI Features Section */}
+        <div className="mt-8 pt-6 border-t border-vav-text-secondary">
+          <h3 className="text-xl font-serif text-vav-accent-primary mb-4">AI Insights</h3>
+          {aiError && ( // Error from AI call
+            <p className="text-red-500 text-sm mb-4 text-center bg-red-900 bg-opacity-30 p-2 rounded">{aiError}</p>
+          )}
+          <div className="flex flex-col sm:flex-row justify-center gap-4 mb-6">
+            <button
+              onClick={handleGetAiValueInsight}
+              disabled={aiLoading}
+              className="bg-vav-accent-primary text-vav-background font-semibold py-2 px-4 rounded-md shadow-md hover:bg-vav-accent-secondary transition-colors duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+            >
+              {aiLoading ? (
+                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              ) : (
+                'Get AI Value Insight'
+              )}
+            </button>
+            <button
+              onClick={handleGetAiSuggestions}
+              disabled={aiLoading}
+              className="bg-vav-accent-primary text-vav-background font-semibold py-2 px-4 rounded-md shadow-md hover:bg-vav-accent-secondary transition-colors duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+            >
+              {aiLoading ? (
+                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              ) : (
+                'Suggest Related Gear'
+              )}
+            </button>
+          </div>
+
+          {aiValueInsight && (
+            <div className="bg-vav-background p-4 rounded-md mb-4 text-center">
+              <p className="text-vav-text-secondary text-base mb-2">Suggested Market Value:</p>
+              <p className="text-vav-accent-primary text-xl font-bold mb-2">{aiValueInsight}</p>
+              <p className="text-vav-text-secondary text-xs">
+                Disclaimer: This is an automated estimate for informational purposes only and not a formal appraisal. Market values fluctuate.
+              </p>
+            </div>
+          )}
+
+          {aiSuggestions && (
+            <div className="bg-vav-background p-4 rounded-md text-center">
+              <p className="text-vav-text-secondary text-base mb-2">Related Gear Suggestions:</p>
+              <div className="text-vav-text text-left mx-auto max-w-md"> {/* Constrain width of list */}
+                <div dangerouslySetInnerHTML={{ __html: aiSuggestions.replace(/\n/g, '<br/>') }} /> {/* Render newline as break */}
+              </div>
             </div>
           )}
         </div>

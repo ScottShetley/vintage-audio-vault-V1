@@ -1,22 +1,23 @@
 // server/routes/audioItemRoutes.js
 const express = require ('express');
-const AudioItem = require ('../models/AudioItem'); // Adjust path as per your project structure
-const {protect} = require ('../middleware/authMiddleware'); // Adjust path
+const AudioItem = require ('../models/AudioItem');
+const {protect} = require ('../middleware/authMiddleware');
 const multer = require ('multer');
-const {Storage} = require ('@google-cloud/storage'); // --- ADDED: GCS Import ---
-const path = require ('path'); // --- ADDED: Path module for resolving key file path ---
+const {Storage} = require ('@google-cloud/storage');
+const path = require ('path');
+const {
+  getAiValueInsight,
+  getRelatedGearSuggestions,
+} = require ('../utils/geminiService');
 
 const router = express.Router ();
 
 // --- CONFIGURE MULTER ---
-// Multer is configured to store files in memory as buffers.
-// This is necessary before uploading to GCS.
 const storage = multer.memoryStorage ();
 const upload = multer ({
   storage: storage,
-  limits: {fileSize: 5 * 1024 * 1024}, // Limit file size to 5MB (adjust as needed)
+  limits: {fileSize: 5 * 1024 * 1024}, // 5MB limit
   fileFilter: (req, file, cb) => {
-    // Only allow image files
     if (file.mimetype.startsWith ('image/')) {
       cb (null, true);
     } else {
@@ -27,50 +28,40 @@ const upload = multer ({
 // --- END MULTER CONFIG ---
 
 // --- CONFIGURE GOOGLE CLOUD STORAGE ---
-// Initialize GCS client with credentials from the key file.
-// The keyFilename path is resolved relative to the current file's directory (__dirname).
-// Ensure GCP_PROJECT_ID, GCS_BUCKET_NAME, and GCS_KEY_FILE_PATH are correctly set in your root .env
 const gcs = new Storage ({
   projectId: process.env.GCP_PROJECT_ID,
-  keyFilename: path.join (__dirname, '..', process.env.GCS_KEY_FILE_PATH), // Go up to server/ then into gcpjson/filename
+  keyFilename: path.join (__dirname, '..', process.env.GCS_KEY_FILE_PATH),
 });
 
-const bucket = gcs.bucket (process.env.GCS_BUCKET_NAME); // Your GCS bucket name
+const bucket = gcs.bucket (process.env.GCS_BUCKET_NAME);
 
-// Helper function to upload a single file buffer to GCS
 const uploadFileToGCS = file => {
   return new Promise ((resolve, reject) => {
     if (!file) {
-      return resolve (null); // No file to upload
+      return resolve (null);
     }
 
-    // Create a unique filename for the object in GCS
-    const newFileName = `${Date.now ()}-${file.originalname.replace (/ /g, '_')}`; // Replace spaces for URLs
-    const blob = bucket.file (newFileName); // Create a new blob (file) in the bucket
+    const newFileName = `${Date.now ()}-${file.originalname.replace (/ /g, '_')}`;
+    const blob = bucket.file (newFileName);
 
-    // Create a writable stream to upload the file buffer
     const blobStream = blob.createWriteStream ({
-      resumable: false, // Set to false for smaller files, true for larger ones
+      resumable: false,
       metadata: {
-        contentType: file.mimetype, // Set the content type for the uploaded file
+        contentType: file.mimetype,
       },
-      public: true, // Make the uploaded object publicly readable
+      public: true,
     });
 
-    // Handle errors during the upload process
     blobStream.on ('error', err => {
       console.error ('GCS Upload Stream Error:', err);
       reject (err);
     });
 
-    // Handle successful completion of the upload
     blobStream.on ('finish', () => {
-      // Construct the public URL for the uploaded object
       const publicUrl = `https://storage.googleapis.com/${bucket.name}/${blob.name}`;
-      resolve (publicUrl); // Resolve the promise with the public URL
+      resolve (publicUrl);
     });
 
-    // End the stream with the file's buffer, triggering the upload
     blobStream.end (file.buffer);
   });
 };
@@ -80,17 +71,14 @@ const uploadFileToGCS = file => {
 router.use (protect);
 
 // --- POST /api/items (Create new item) ---
-// 'upload.array('photos', 5)' middleware parses multipart/form-data.
-// 'photos' is the field name from your frontend form, 5 is the max number of files.
 router.post ('/', upload.array ('photos', 5), async (req, res) => {
   try {
-    // Destructure text fields from req.body (parsed by multer)
     const {
       make,
       model,
       itemType,
       condition,
-      isFullyFunctional, // Comes as a string 'true' or 'false' from FormData
+      isFullyFunctional,
       issuesDescription,
       specifications,
       notes,
@@ -100,10 +88,8 @@ router.post ('/', upload.array ('photos', 5), async (req, res) => {
       userEstimatedValueDate,
     } = req.body;
 
-    // Convert isFullyFunctional from string to boolean
     const parsedIsFullyFunctional = isFullyFunctional === 'true';
 
-    // Basic validation for required fields
     if (
       !make ||
       !model ||
@@ -117,21 +103,15 @@ router.post ('/', upload.array ('photos', 5), async (req, res) => {
       });
     }
 
-    // --- UPLOAD NEW PHOTOS TO GCS ---
     const photoUrls = [];
-    // req.files contains the file buffers from multer
     if (req.files && req.files.length > 0) {
-      // Map each file to an upload promise and wait for all to complete
       const uploadPromises = req.files.map (file => uploadFileToGCS (file));
       const uploadedUrls = await Promise.all (uploadPromises);
-      // Filter out any nulls (failed uploads) and add successful URLs
       photoUrls.push (...uploadedUrls.filter (url => url !== null));
     }
-    // --- END UPLOAD NEW PHOTOS TO GCS ---
 
-    // Create a new AudioItem document in MongoDB
     const newItem = await AudioItem.create ({
-      user: req.user._id, // Associate item with the logged-in user
+      user: req.user._id,
       make,
       model,
       itemType,
@@ -139,17 +119,16 @@ router.post ('/', upload.array ('photos', 5), async (req, res) => {
       isFullyFunctional: parsedIsFullyFunctional,
       issuesDescription: parsedIsFullyFunctional
         ? undefined
-        : issuesDescription, // Only save if not fully functional
+        : issuesDescription,
       specifications,
       notes,
-      photoUrls: photoUrls, // Save the GCS public URLs
+      photoUrls: photoUrls,
       purchaseDate,
       purchasePrice,
       userEstimatedValue,
       userEstimatedValueDate,
     });
 
-    // Send success response with the new item
     res.status (201).json ({
       status: 'success',
       data: {
@@ -158,7 +137,6 @@ router.post ('/', upload.array ('photos', 5), async (req, res) => {
     });
   } catch (error) {
     console.error ('CREATE ITEM ERROR:', error);
-    // Handle specific error types
     if (error.name === 'ValidationError') {
       return res
         .status (400)
@@ -175,7 +153,6 @@ router.post ('/', upload.array ('photos', 5), async (req, res) => {
     if (error.message === 'Only image files are allowed!') {
       return res.status (400).json ({status: 'fail', message: error.message});
     }
-    // Generic server error
     res
       .status (500)
       .json ({status: 'error', message: 'Server error while creating item.'});
@@ -187,7 +164,7 @@ router.get ('/', async (req, res) => {
   try {
     const items = await AudioItem.find ({user: req.user._id}).sort ({
       createdAt: -1,
-    }); // Sort by newest first
+    });
     res.status (200).json ({
       status: 'success',
       results: items.length,
@@ -214,7 +191,6 @@ router.get ('/:id', async (req, res) => {
         .json ({status: 'fail', message: 'No item found with that ID.'});
     }
 
-    // Ensure the logged-in user owns the item
     if (item.user.toString () !== req.user._id.toString ()) {
       return res
         .status (403)
@@ -228,7 +204,6 @@ router.get ('/:id', async (req, res) => {
   } catch (error) {
     console.error ('GET SINGLE ITEM ERROR:', error);
     if (error.kind === 'ObjectId') {
-      // Mongoose specific error for invalid ID format
       return res
         .status (400)
         .json ({status: 'fail', message: 'Invalid item ID format.'});
@@ -240,11 +215,8 @@ router.get ('/:id', async (req, res) => {
 });
 
 // --- PUT /api/items/:id (Update item by ID) ---
-// 'upload.array('photos', 5)' middleware parses multipart/form-data for new photos
 router.put ('/:id', upload.array ('photos', 5), async (req, res) => {
   try {
-    // Destructure text fields from req.body (parsed by multer)
-    // existingPhotoUrls will come as a JSON string from the frontend
     const {
       user,
       isFullyFunctional,
@@ -252,13 +224,12 @@ router.put ('/:id', upload.array ('photos', 5), async (req, res) => {
       ...updateData
     } = req.body;
 
-    // Convert isFullyFunctional from string to boolean if it exists in req.body
     if (typeof isFullyFunctional !== 'undefined') {
       updateData.isFullyFunctional = isFullyFunctional === 'true';
       if (!updateData.isFullyFunctional) {
         updateData.issuesDescription = req.body.issuesDescription;
       } else {
-        updateData.issuesDescription = undefined; // Clear if now fully functional
+        updateData.issuesDescription = undefined;
       }
     }
 
@@ -282,26 +253,19 @@ router.put ('/:id', upload.array ('photos', 5), async (req, res) => {
         });
     }
 
-    // --- Handle existing photos (from frontend's existingPhotoUrls array) ---
-    // Parse the JSON string of existing photo URLs back into an array.
-    // This array represents the photos the user *kept* on the frontend.
     let currentPhotoUrls = JSON.parse (existingPhotoUrls || '[]');
 
-    // --- Upload new photos to GCS for update ---
-    // req.files contains the new file buffers from multer
     if (req.files && req.files.length > 0) {
       const uploadPromises = req.files.map (file => uploadFileToGCS (file));
       const uploadedUrls = await Promise.all (uploadPromises);
-      currentPhotoUrls.push (...uploadedUrls.filter (url => url !== null)); // Add only successful new uploads
+      currentPhotoUrls.push (...uploadedUrls.filter (url => url !== null));
     }
 
-    // Update the photoUrls field in the database with the combined list
     updateData.photoUrls = currentPhotoUrls;
 
-    // Find and update the AudioItem document
     item = await AudioItem.findByIdAndUpdate (req.params.id, updateData, {
-      new: true, // Return the modified document rather than the original
-      runValidators: true, // Ensure schema validations are run on update
+      new: true,
+      runValidators: true,
     });
 
     res.status (200).json ({status: 'success', data: {item}});
@@ -334,7 +298,6 @@ router.put ('/:id', upload.array ('photos', 5), async (req, res) => {
   }
 });
 
-// --- DELETE /api/items/:id (Delete item by ID) ---
 router.delete ('/:id', async (req, res) => {
   try {
     const item = await AudioItem.findById (req.params.id);
@@ -357,11 +320,6 @@ router.delete ('/:id', async (req, res) => {
         });
     }
 
-    // --- OPTIONAL: Delete images from GCS when item is deleted ---
-    // This is more advanced. For now, we'll just delete the DB record.
-    // If item.photoUrls exists, you would loop through them and call gcs.bucket.file(filename).delete()
-    // For now, we'll skip this to keep it simpler.
-
     await AudioItem.findByIdAndDelete (req.params.id);
 
     res.status (204).json ({status: 'success', data: null}); // 204 No Content
@@ -375,6 +333,119 @@ router.delete ('/:id', async (req, res) => {
     res
       .status (500)
       .json ({status: 'error', message: 'Server error while deleting item.'});
+  }
+});
+
+// --- NEW AI ENDPOINTS (MODIFIED BLOCK TO PASS IMAGES) ---
+
+// POST /api/items/:id/ai-value - Get AI Value Insight
+router.post ('/:id/ai-value', async (req, res) => {
+  try {
+    const item = await AudioItem.findById (req.params.id);
+
+    if (!item) {
+      return res
+        .status (404)
+        .json ({status: 'fail', message: 'Item not found.'});
+    }
+
+    // Ensure the logged-in user owns the item
+    if (item.user.toString () !== req.user._id.toString ()) {
+      return res
+        .status (403)
+        .json ({
+          status: 'fail',
+          message: 'You are not authorized to access this item.',
+        });
+    }
+
+    // Pass item.photoUrls to getAiValueInsight
+    const aiValueInsight = await getAiValueInsight (
+      item.make,
+      item.model,
+      item.condition,
+      item.photoUrls
+    );
+
+    res.status (200).json ({
+      status: 'success',
+      data: {
+        aiValueInsight,
+        disclaimer: 'This is an automated estimate for informational purposes only and not a formal appraisal. Market values fluctuate.',
+      },
+    });
+  } catch (error) {
+    console.error ('AI VALUE INSIGHT ERROR:', error);
+    // Handle potential API errors from Gemini (e.g., rate limits, invalid API key)
+    if (error.response && error.response.status === 429) {
+      // Too Many Requests
+      return res
+        .status (429)
+        .json ({
+          status: 'fail',
+          message: 'AI service is busy. Please try again in a moment.',
+        });
+    }
+    res
+      .status (500)
+      .json ({
+        status: 'error',
+        message: 'Server error while getting AI value insight.',
+      });
+  }
+});
+
+// POST /api/items/:id/ai-suggest-gear - Get AI Related Gear Suggestions
+router.post ('/:id/ai-suggest-gear', async (req, res) => {
+  try {
+    const item = await AudioItem.findById (req.params.id);
+
+    if (!item) {
+      return res
+        .status (404)
+        .json ({status: 'fail', message: 'Item not found.'});
+    }
+
+    // Ensure the logged-in user owns the item
+    if (item.user.toString () !== req.user._id.toString ()) {
+      return res
+        .status (403)
+        .json ({
+          status: 'fail',
+          message: 'You are not authorized to access this item.',
+        });
+    }
+
+    // Pass item.photoUrls to getRelatedGearSuggestions
+    const aiSuggestions = await getRelatedGearSuggestions (
+      item.make,
+      item.model,
+      item.itemType,
+      item.photoUrls
+    );
+
+    res.status (200).json ({
+      status: 'success',
+      data: {
+        aiSuggestions,
+      },
+    });
+  } catch (error) {
+    console.error ('AI SUGGESTIONS ERROR:', error);
+    if (error.response && error.response.status === 429) {
+      return res
+        .status (429)
+        .json ({
+          status: 'fail',
+          message: 'AI service is busy. Please try again in a moment.',
+        });
+    }
+    res
+      .status (500)
+      .json ({
+        status: 'error',
+        message: 'Server error while getting AI suggestions.',
+      });
   }
 });
 
