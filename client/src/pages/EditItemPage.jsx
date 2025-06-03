@@ -1,16 +1,17 @@
-// client/src/pages/AddItemPage.jsx
-import React, { useState } from 'react';
+// client/src/pages/EditItemPage.jsx
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 
-const AddItemPage = () => {
+const EditItemPage = () => {
   const navigate = useNavigate();
+  const { id } = useParams(); // Get item ID from URL
 
-  // Form field states
+  // Form field states (initialized to empty strings for initial fetch)
   const [make, setMake] = useState('');
   const [model, setModel] = useState('');
-  const [itemType, setItemType] = useState('Receiver'); // Default to first option
-  const [condition, setCondition] = useState('Mint'); // Default to first option
+  const [itemType, setItemType] = useState('Receiver');
+  const [condition, setCondition] = useState('Mint');
   const [isFullyFunctional, setIsFullyFunctional] = useState(true);
   const [issuesDescription, setIssuesDescription] = useState('');
   const [specifications, setSpecifications] = useState('');
@@ -19,35 +20,75 @@ const AddItemPage = () => {
   const [purchasePrice, setPurchasePrice] = useState('');
   const [userEstimatedValue, setUserEstimatedValue] = useState('');
   const [userEstimatedValueDate, setUserEstimatedValueDate] = useState('');
-  const [photos, setPhotos] = useState([]); // To store File objects
+  const [photos, setPhotos] = useState([]); // For new files to upload
+  const [existingPhotoUrls, setExistingPhotoUrls] = useState([]); // To display/manage existing photos
 
   // UI states
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false); // For form submission
+  const [initialLoading, setInitialLoading] = useState(true); // For initial data fetch
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
 
   const itemTypeOptions = ['Receiver', 'Turntable', 'Speakers', 'Amplifier', 'Pre-amplifier', 'Tape Deck', 'CD Player', 'Equalizer', 'Tuner', 'Integrated Amplifier', 'Other'];
   const conditionOptions = ['Mint', 'Near Mint', 'Excellent', 'Very Good', 'Good', 'Fair', 'For Parts/Not Working', 'Restored'];
 
-  const clearForm = () => {
-    setMake('');
-    setModel('');
-    setItemType('Receiver');
-    setCondition('Mint');
-    setIsFullyFunctional(true);
-    setIssuesDescription('');
-    setSpecifications('');
-    setNotes('');
-    setPurchaseDate('');
-    setPurchasePrice('');
-    setUserEstimatedValue('');
-    setUserEstimatedValueDate('');
-    setPhotos([]);
-    // Clear file input visually (this is a bit tricky, often requires resetting the input element itself)
-    const fileInput = document.getElementById('photos');
-    if (fileInput) {
-      fileInput.value = '';
-    }
+  // Fetch item details on component mount
+  useEffect(() => {
+    const fetchItemDetails = async () => {
+      setInitialLoading(true);
+      setError(null);
+      const token = localStorage.getItem('token');
+
+      if (!token) {
+        setError('Authorization token not found. Please login.');
+        setInitialLoading(false);
+        navigate('/login');
+        return;
+      }
+
+      try {
+        const response = await axios.get(`http://localhost:5000/api/items/${id}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        const itemData = response.data.data.item;
+
+        // Pre-populate form fields with fetched data
+        setMake(itemData.make || '');
+        setModel(itemData.model || '');
+        setItemType(itemData.itemType || 'Receiver');
+        setCondition(itemData.condition || 'Mint');
+        setIsFullyFunctional(itemData.isFullyFunctional ?? true); // Handle null/undefined
+        setIssuesDescription(itemData.issuesDescription || '');
+        setSpecifications(itemData.specifications || '');
+        setNotes(itemData.notes || '');
+        setPurchaseDate(itemData.purchaseDate ? new Date(itemData.purchaseDate).toISOString().split('T')[0] : '');
+        setPurchasePrice(itemData.purchasePrice || '');
+        setUserEstimatedValue(itemData.userEstimatedValue || '');
+        setUserEstimatedValueDate(itemData.userEstimatedValueDate ? new Date(itemData.userEstimatedValueDate).toISOString().split('T')[0] : '');
+        setExistingPhotoUrls(itemData.photoUrls || []); // Set existing photo URLs
+
+      } catch (err) {
+        console.error('Failed to load item details for editing:', err);
+        if (err.response && (err.response.status === 401 || err.response.status === 403)) {
+          localStorage.removeItem('token');
+          navigate('/login');
+        } else if (err.response && err.response.status === 404) {
+          setError('Item not found for editing.');
+        } else {
+          setError(err.response?.data?.message || 'Failed to load item details for editing. Please try again.');
+        }
+      } finally {
+        setInitialLoading(false);
+      }
+    };
+
+    fetchItemDetails();
+  }, [id, navigate]); // Re-fetch if ID changes
+
+  const handleRemoveExistingPhoto = (urlToRemove) => {
+    setExistingPhotoUrls(existingPhotoUrls.filter(url => url !== urlToRemove));
   };
 
   const handleSubmit = async (event) => {
@@ -81,31 +122,34 @@ const AddItemPage = () => {
     if (userEstimatedValue) formData.append('userEstimatedValue', userEstimatedValue);
     if (userEstimatedValueDate) formData.append('userEstimatedValueDate', userEstimatedValueDate);
 
+    // Append new photos
     for (let i = 0; i < photos.length; i++) {
       formData.append('photos', photos[i]);
     }
+    // Append existing photo URLs (if any were kept)
+    // Note: Backend needs to handle this array of URLs for PUT requests
+    formData.append('existingPhotoUrls', JSON.stringify(existingPhotoUrls)); // Send as JSON string
 
     try {
-      const response = await axios.post('http://localhost:5000/api/items', formData, {
+      const response = await axios.put(`http://localhost:5000/api/items/${id}`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
           Authorization: `Bearer ${token}`,
         },
       });
 
-      console.log('Item added successfully:', response.data);
-      setSuccessMessage('Item added successfully! Redirecting to dashboard...');
-      clearForm();
+      console.log('Item updated successfully:', response.data);
+      setSuccessMessage('Item updated successfully! Redirecting to item details...');
       setTimeout(() => {
-        navigate('/dashboard');
+        navigate(`/item/${id}`); // Redirect back to the detailed view
       }, 2000);
     } catch (err) {
-      console.error('Failed to add item:', err);
+      console.error('Failed to update item:', err);
       if (err.response && (err.response.status === 401 || err.response.status === 403)) {
         localStorage.removeItem('token');
         navigate('/login');
       } else {
-        setError(err.response?.data?.message || 'Failed to add item. Please try again.');
+        setError(err.response?.data?.message || 'Failed to update item. Please try again.');
       }
     } finally {
       setLoading(false);
@@ -114,6 +158,34 @@ const AddItemPage = () => {
 
   const inputClass = "mt-1 block w-full px-3 py-2 bg-vav-content-card border border-vav-accent-primary rounded-md shadow-sm focus:outline-none focus:ring-vav-accent-secondary focus:border-vav-accent-secondary sm:text-sm text-vav-text placeholder-vav-text-secondary";
   const labelClass = "block text-sm font-medium text-vav-text-secondary mb-1";
+  const placeholderImageUrl = 'https://placehold.co/100x100/2C2C2C/E0E0E0?text=No+Image';
+
+  if (initialLoading) {
+    return (
+      <div className="bg-vav-background text-vav-text p-6 min-h-screen flex flex-col items-center justify-center w-full">
+        <div className="flex justify-center items-center h-48">
+          <svg className="animate-spin h-10 w-10 text-vav-accent-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <p className="ml-3 text-lg">Loading item for editing...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !initialLoading) {
+    return (
+      <div className="bg-vav-background text-vav-text p-6 min-h-screen flex flex-col items-center justify-center w-full">
+        <div className="text-center p-4 bg-red-900 bg-opacity-30 rounded-md">
+          <p className="text-red-400 text-lg">{error}</p>
+          <Link to="/dashboard" className="mt-4 inline-block text-vav-accent-primary hover:text-vav-accent-secondary transition-colors">
+            &larr; Back to Dashboard
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     // This div is the main container for the page's content.
@@ -121,12 +193,12 @@ const AddItemPage = () => {
     // We apply max-w-2xl to this div, and mx-auto to center it within the <main> tag's available space.
     <div className="w-full max-w-2xl mx-auto p-4">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-serif text-vav-accent-primary">Add New Item</h1>
+        <h1 className="text-3xl font-serif text-vav-accent-primary">Edit Item</h1>
         <Link
-          to="/dashboard"
+          to={`/item/${id}`}
           className="text-vav-accent-primary hover:text-vav-accent-secondary transition-colors"
         >
-          &larr; Back to Dashboard
+          &larr; Back to Item Details
         </Link>
       </div>
 
@@ -216,9 +288,31 @@ const AddItemPage = () => {
           </div>
         </div>
 
-        {/* Photo Upload */}
+        {/* Existing Photos Display */}
+        {existingPhotoUrls.length > 0 && (
+          <div>
+            <label className={labelClass}>Existing Photos</label>
+            <div className="grid grid-cols-3 gap-2 mt-2">
+              {existingPhotoUrls.map((url, index) => (
+                <div key={index} className="relative">
+                  <img src={url} alt={`Existing photo ${index + 1}`} className="w-full h-24 object-cover rounded-md" onError={(e) => { e.target.onerror = null; e.target.src = placeholderImageUrl; }} />
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveExistingPhoto(url)}
+                    className="absolute top-0 right-0 bg-red-600 text-white rounded-full h-6 w-6 flex items-center justify-center text-xs -mt-2 -mr-2 hover:bg-red-700"
+                    aria-label="Remove photo"
+                  >
+                    &times;
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* New Photo Upload */}
         <div>
-          <label htmlFor="photos" className={labelClass}>Photos (select multiple)</label>
+          <label htmlFor="photos" className={labelClass}>Add New Photos (select multiple)</label>
           <input
             type="file"
             id="photos"
@@ -229,7 +323,7 @@ const AddItemPage = () => {
           />
            {photos.length > 0 && (
             <div className="mt-2 text-xs text-vav-text-secondary">
-              {photos.length} file(s) selected: {photos.map(f => f.name).join(', ')}
+              {photos.length} new file(s) selected: {photos.map(f => f.name).join(', ')}
             </div>
           )}
         </div>
@@ -253,11 +347,11 @@ const AddItemPage = () => {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                Submitting...
+                Updating...
               </>
             ) : (
-                'Add Item to Collection'
-              )}
+              'Update Item'
+            )}
           </button>
         </div>
       </form>
@@ -265,4 +359,4 @@ const AddItemPage = () => {
   );
 };
 
-export default AddItemPage;
+export default EditItemPage;

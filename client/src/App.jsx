@@ -7,10 +7,9 @@ import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import DashboardPage from './pages/DashboardPage';
 import ProtectedRoute from './components/ProtectedRoute';
-
-// --- ADD THIS LINE ---
-import AddItemPage from './pages/AddItemPage'; // Import the AddItemPage
-// --- END ADDED LINE ---
+import AddItemPage from './pages/AddItemPage';
+import DetailedItemView from './pages/DetailedItemView';
+import EditItemPage from './pages/EditItemPage';
 
 // Your main CSS file which now includes Tailwind directives
 import './index.css';
@@ -19,9 +18,10 @@ function App () {
   return (
     <Router>
       {/* Apply the overall dark theme using Tailwind classes and custom colors */}
+      {/* This outer div ensures the entire viewport is covered with the background */}
       <div className="min-h-screen bg-vav-background text-vav-text font-sans flex flex-col items-center p-5 box-border">
-        {/* Basic Navigation Links */}
-        <nav className="w-full max-w-4xl mb-10 py-4 border-b border-vav-content-card flex justify-center items-center">
+        {/* Navigation bar - centered and responsive width */}
+        <nav className="w-full max-w-full md:max-w-4xl lg:max-w-6xl mb-10 py-4 border-b border-vav-content-card flex justify-center items-center mx-auto">
           <ul className="flex gap-8 list-none p-0 m-0">
             <li>
               <Link
@@ -50,8 +50,9 @@ function App () {
           </ul>
         </nav>
 
-        {/* Main content area where routes are rendered */}
-        <main className="w-full max-w-3xl flex-grow flex flex-col items-center justify-start">
+        {/* Main content area - takes available space, centered and responsive width */}
+        {/* This main tag will be a flex container that centers its direct child (the page component) */}
+        <main className="w-full max-w-full md:max-w-3xl lg:max-w-5xl flex-grow flex flex-col items-center justify-center mx-auto">
           {/* Define your routes here */}
           <Routes>
             {/* Public routes */}
@@ -69,9 +70,9 @@ function App () {
             {/* Protected Routes */}
             <Route element={<ProtectedRoute />}>
               <Route path="/dashboard" element={<DashboardPage />} />
-              {/* --- ADD THIS ROUTE --- */}
               <Route path="/add-item" element={<AddItemPage />} />
-              {/* --- END ADDED ROUTE --- */}
+              <Route path="/item/:id" element={<DetailedItemView />} />
+              <Route path="/edit-item/:id" element={<EditItemPage />} />
             </Route>
 
             {/* Catch-all route for 404s */}

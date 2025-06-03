@@ -1,37 +1,32 @@
 // client/src/pages/LoginPage.jsx
 import React, {useState} from 'react';
-import {Link, useNavigate} from 'react-router-dom'; // Import useNavigate
-import axios from 'axios'; // Import axios
+import {Link, useNavigate} from 'react-router-dom';
+import axios from 'axios';
 
 const LoginPage = () => {
   const [email, setEmail] = useState ('');
   const [password, setPassword] = useState ('');
-  const [error, setError] = useState (''); // State for error messages
-  const navigate = useNavigate (); // Initialize navigate hook
+  const [error, setError] = useState ('');
+  const navigate = useNavigate ();
 
   const handleSubmit = async event => {
-    // Make handleSubmit async
     event.preventDefault ();
-    setError (''); // Clear previous errors
+    setError ('');
 
     try {
       const response = await axios.post (
         'http://localhost:5000/api/auth/login',
         {
-          // Make API call
           email,
           password,
         }
       );
 
-      // Handle successful login
       console.log ('Login successful:', response.data);
-      // Store the JWT token (e.g., in localStorage)
       localStorage.setItem ('token', response.data.token);
-      // Redirect to a dashboard or collection page (we'll create this later)
-      navigate ('/dashboard'); // Redirect to a placeholder dashboard route
+      console.log ('Token stored:', localStorage.getItem ('token'));
+      navigate ('/dashboard');
     } catch (err) {
-      // Handle login errors
       console.error (
         'Login error:',
         err.response ? err.response.data : err.message
@@ -44,103 +39,59 @@ const LoginPage = () => {
     }
   };
 
-  const styles = {
-    container: {
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      minHeight: '100vh',
-      fontFamily: 'Arial, sans-serif',
-      backgroundColor: '#f0f2f5',
-    },
-    form: {
-      display: 'flex',
-      flexDirection: 'column',
-      padding: '40px',
-      borderRadius: '8px',
-      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-      backgroundColor: 'white',
-      width: '100%',
-      maxWidth: '400px',
-    },
-    title: {
-      marginBottom: '24px',
-      color: '#333',
-      textAlign: 'center',
-    },
-    input: {
-      marginBottom: '16px',
-      padding: '12px',
-      fontSize: '16px',
-      border: '1px solid #ccc',
-      borderRadius: '4px',
-      boxSizing: 'border-box',
-    },
-    button: {
-      padding: '12px',
-      fontSize: '16px',
-      color: 'white',
-      backgroundColor: '#007bff',
-      border: 'none',
-      borderRadius: '4px',
-      cursor: 'pointer',
-      transition: 'background-color 0.2s',
-    },
-    // Note: Inline styles don't directly support :hover, this is illustrative
-    // buttonHover is not directly used in inline styles here but kept for context if you switch to CSS classes.
-    buttonHover: {
-      backgroundColor: '#0056b3',
-    },
-    errorMessage: {
-      // Style for error message
-      color: 'red',
-      marginBottom: '10px',
-      textAlign: 'center',
-      fontSize: '14px',
-    },
-    signupLink: {
-      marginTop: '20px',
-      textAlign: 'center',
-      fontSize: '14px',
-    },
-    link: {
-      color: '#007bff',
-      textDecoration: 'none',
-    },
-  };
-
   return (
-    <div style={styles.container}>
-      <form onSubmit={handleSubmit} style={styles.form}>
-        <h2 style={styles.title}>Login</h2>
-        {error && <p style={styles.errorMessage}>{error}</p>}
-        {' '}
-        {/* Display error message */}
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={e => setEmail (e.target.value)}
-          style={styles.input}
-          required
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={e => setPassword (e.target.value)}
-          style={styles.input}
-          required
-        />
-        <button type="submit" style={styles.button}>Login</button>
-        <p style={styles.signupLink}>
-          Don't have an account?
-          {' '}
-          <Link to="/signup" style={styles.link}>Sign Up</Link>
-        </p>
-      </form>
-    </div>
+    // This div is the main container for the page's content.
+    // It will be centered by the <main> tag in App.jsx.
+    // The form itself has max-w-md and mx-auto for centering within this container.
+    (
+      <div className="w-full max-w-md mx-auto p-4">
+        {' '}{/* Removed redundant flex/justify-center/min-h-screen */}
+        <form
+          onSubmit={handleSubmit}
+          className="bg-vav-content-card p-8 rounded-lg shadow-xl w-full text-vav-text"
+        >
+          <h2 className="text-3xl font-serif text-vav-accent-primary mb-6 text-center">
+            Login
+          </h2>
+          {error &&
+            <p className="text-red-500 text-sm mb-4 text-center bg-red-900 bg-opacity-30 p-2 rounded">
+              {error}
+            </p>}
+          <input
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={e => setEmail (e.target.value)}
+            className="mb-4 p-3 text-base border border-vav-accent-primary rounded-md w-full bg-vav-background text-vav-text placeholder-vav-text-secondary focus:outline-none focus:ring-2 focus:ring-vav-accent-secondary"
+            required
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={e => setPassword (e.target.value)}
+            className="mb-6 p-3 text-base border border-vav-accent-primary rounded-md w-full bg-vav-background text-vav-text placeholder-vav-text-secondary focus:outline-none focus:ring-2 focus:ring-vav-accent-secondary"
+            required
+          />
+          <button
+            type="submit"
+            className="w-full bg-vav-accent-primary hover:bg-vav-accent-secondary text-vav-background font-semibold py-3 px-4 rounded-md shadow-md transition-colors duration-150 ease-in-out"
+          >
+            Login
+          </button>
+          <p className="mt-6 text-center text-sm text-vav-text-secondary">
+            Don't have an account?
+            {' '}
+            <Link
+              to="/signup"
+              className="text-vav-accent-primary hover:text-vav-accent-secondary transition-colors"
+            >
+              Sign Up
+            </Link>
+          </p>
+        </form>
+      </div>
+    )
   );
 };
 

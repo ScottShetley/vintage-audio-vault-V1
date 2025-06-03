@@ -1,21 +1,20 @@
 // client/src/pages/SignupPage.jsx
 import React, {useState} from 'react';
-import {Link, useNavigate} from 'react-router-dom'; // Import useNavigate
-import axios from 'axios'; // Import axios
+import {Link, useNavigate} from 'react-router-dom';
+import axios from 'axios';
 
 const SignupPage = () => {
   const [email, setEmail] = useState ('');
   const [password, setPassword] = useState ('');
   const [confirmPassword, setConfirmPassword] = useState ('');
-  const [error, setError] = useState (''); // State for error messages
-  const [successMessage, setSuccessMessage] = useState (''); // State for success message
-  const navigate = useNavigate (); // Initialize navigate hook
+  const [error, setError] = useState ('');
+  const [successMessage, setSuccessMessage] = useState ('');
+  const navigate = useNavigate ();
 
   const handleSubmit = async event => {
-    // Make handleSubmit async
     event.preventDefault ();
-    setError (''); // Clear previous errors
-    setSuccessMessage (''); // Clear previous success messages
+    setError ('');
+    setSuccessMessage ('');
 
     if (password !== confirmPassword) {
       setError ('Passwords do not match.');
@@ -31,25 +30,20 @@ const SignupPage = () => {
       const response = await axios.post (
         'http://localhost:5000/api/auth/register',
         {
-          // Make API call
           email,
           password,
         }
       );
 
-      // Handle successful registration
       console.log ('Registration successful:', response.data);
       setSuccessMessage ('Registration successful! Please log in.');
-      // Optionally, clear form fields
       setEmail ('');
       setPassword ('');
       setConfirmPassword ('');
-      // You might redirect to login page after a short delay
       setTimeout (() => {
         navigate ('/login');
-      }, 2000); // Redirect after 2 seconds
+      }, 2000);
     } catch (err) {
-      // Handle registration errors
       console.error (
         'Registration error:',
         err.response ? err.response.data : err.message
@@ -62,116 +56,70 @@ const SignupPage = () => {
     }
   };
 
-  const styles = {
-    container: {
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      minHeight: '100vh',
-      fontFamily: 'Arial, sans-serif',
-      backgroundColor: '#f0f2f5',
-    },
-    form: {
-      display: 'flex',
-      flexDirection: 'column',
-      padding: '40px',
-      borderRadius: '8px',
-      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-      backgroundColor: 'white',
-      width: '100%',
-      maxWidth: '400px',
-    },
-    title: {
-      marginBottom: '24px',
-      color: '#333',
-      textAlign: 'center',
-    },
-    input: {
-      marginBottom: '16px',
-      padding: '12px',
-      fontSize: '16px',
-      border: '1px solid #ccc',
-      borderRadius: '4px',
-      boxSizing: 'border-box',
-    },
-    button: {
-      padding: '12px',
-      fontSize: '16px',
-      color: 'white',
-      backgroundColor: '#28a745', // A slightly different color for signup
-      border: 'none',
-      borderRadius: '4px',
-      cursor: 'pointer',
-      transition: 'background-color 0.2s',
-    },
-    errorMessage: {
-      color: 'red',
-      marginBottom: '10px',
-      textAlign: 'center',
-      fontSize: '14px',
-    },
-    successMessage: {
-      // Style for success message
-      color: 'green',
-      marginBottom: '10px',
-      textAlign: 'center',
-      fontSize: '14px',
-    },
-    loginLink: {
-      marginTop: '20px',
-      textAlign: 'center',
-      fontSize: '14px',
-    },
-    link: {
-      color: '#007bff',
-      textDecoration: 'none',
-    },
-  };
-
   return (
-    <div style={styles.container}>
-      <form onSubmit={handleSubmit} style={styles.form}>
-        <h2 style={styles.title}>Sign Up</h2>
-        {error && <p style={styles.errorMessage}>{error}</p>}
-        {' '}
-        {/* Display error message */}
-        {successMessage &&
-          <p style={styles.successMessage}>{successMessage}</p>}
-        {' '}
-        {/* Display success message */}
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={e => setEmail (e.target.value)}
-          style={styles.input}
-          required
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={e => setPassword (e.target.value)}
-          style={styles.input}
-          required
-        />
-        <input
-          type="password"
-          placeholder="Confirm Password"
-          value={confirmPassword}
-          onChange={e => setConfirmPassword (e.target.value)}
-          style={styles.input}
-          required
-        />
-        <button type="submit" style={styles.button}>Sign Up</button>
-        <p style={styles.loginLink}>
-          Already have an account?
-          {' '}
-          <Link to="/login" style={styles.link}>Login</Link>
-        </p>
-      </form>
-    </div>
+    // This div is the main container for the page's content.
+    // It will be centered by the <main> tag in App.jsx.
+    // The form itself has max-w-md and mx-auto for centering within this container.
+    (
+      <div className="w-full max-w-md mx-auto p-4 flex flex-col items-center justify-center min-h-screen">
+        <form
+          onSubmit={handleSubmit}
+          className="bg-vav-content-card p-8 rounded-lg shadow-xl w-full text-vav-text"
+        >
+          <h2 className="text-3xl font-serif text-vav-accent-primary mb-6 text-center">
+            Sign Up
+          </h2>
+          {error &&
+            <p className="text-red-500 text-sm mb-4 text-center bg-red-900 bg-opacity-30 p-2 rounded">
+              {error}
+            </p>}
+          {successMessage &&
+            <p className="text-green-400 text-sm mb-4 text-center bg-green-900 bg-opacity-30 p-2 rounded">
+              {successMessage}
+            </p>}
+          <input
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={e => setEmail (e.target.value)}
+            className="mb-4 p-3 text-base border border-vav-accent-primary rounded-md w-full bg-vav-background text-vav-text placeholder-vav-text-secondary focus:outline-none focus:ring-2 focus:ring-vav-accent-secondary"
+            required
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={e => setPassword (e.target.value)}
+            className="mb-4 p-3 text-base border border-vav-accent-primary rounded-md w-full bg-vav-background text-vav-text placeholder-vav-text-secondary focus:outline-none focus:ring-2 focus:ring-vav-accent-secondary"
+            required
+          />
+          <input
+            type="password"
+            placeholder="Confirm Password"
+            value={confirmPassword}
+            onChange={e => setConfirmPassword (e.target.value)}
+            className="mb-6 p-3 text-base border border-vav-accent-primary rounded-md w-full bg-vav-background text-vav-text placeholder-vav-text-secondary focus:outline-none focus:ring-2 focus:ring-vav-accent-secondary"
+            required
+          />
+          <button
+            type="submit"
+            className="w-full bg-vav-accent-primary hover:bg-vav-accent-secondary text-vav-background font-semibold py-3 px-4 rounded-md shadow-md transition-colors duration-150 ease-in-out"
+          >
+            Sign Up
+          </button>
+          <p className="mt-6 text-center text-sm text-vav-text-secondary">
+            Already have an account?
+            {' '}
+            <Link
+              to="/login"
+              className="text-vav-accent-primary hover:text-vav-accent-secondary transition-colors"
+            >
+              Login
+            </Link>
+          </p>
+        </form>
+      </div>
+    )
   );
 };
 
