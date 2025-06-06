@@ -11,12 +11,11 @@ const DetailedItemView = () => {
   const [error, setError] = useState(null); // For item fetch errors
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   
-  // --- ADDED: AI Feature States ---
+  // AI Feature States
   const [aiLoading, setAiLoading] = useState(false); // For AI call loading
   const [aiError, setAiError] = useState(null);     // For AI call errors
-  const [aiValueInsight, setAiValueInsight] = useState(null);
-  const [aiSuggestions, setAiSuggestions] = useState(null);
-  // --- END ADDED AI Feature States ---
+  const [aiValueInsight, setAiValueInsight] = useState(null); // This will be an object
+  const [aiSuggestions, setAiSuggestions] = useState(null);   // This will be an object
 
   // Placeholder image URL for items without photos
   const placeholderImageUrl = 'https://placehold.co/300x200/2C2C2C/E0E0E0?text=No+Image';
@@ -104,7 +103,7 @@ const DetailedItemView = () => {
     setError(null); // Clear any error from confirmation attempt
   };
 
-  // --- ADDED: AI Feature Handlers ---
+  // AI Feature Handlers
   const handleGetAiValueInsight = async () => {
     setAiLoading(true);
     setAiError(null);
@@ -119,15 +118,14 @@ const DetailedItemView = () => {
     }
 
     try {
-      // Pass item.photoUrls in the request body
       const response = await axios.post(`http://localhost:5000/api/items/${id}/ai-value`, {
-        photoUrls: item.photoUrls // Pass the item's photo URLs
+        photoUrls: item.photoUrls
       }, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
-      setAiValueInsight(response.data.data.aiValueInsight);
+      setAiValueInsight(response.data.data.aiValueInsight); // Store the entire object
     } catch (err) {
       console.error('Failed to get AI value insight:', err);
       if (err.response && (err.response.status === 401 || err.response.status === 403)) {
@@ -157,21 +155,20 @@ const DetailedItemView = () => {
     }
 
     try {
-      // Pass item.photoUrls in the request body
       const response = await axios.post(`http://localhost:5000/api/items/${id}/ai-suggest-gear`, {
-        photoUrls: item.photoUrls // Pass the item's photo URLs
+        photoUrls: item.photoUrls
       }, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
-      setAiSuggestions(response.data.data.aiSuggestions);
+      setAiSuggestions(response.data.data.aiSuggestions); // Store the entire object
     } catch (err) {
       console.error('Failed to get AI suggestions:', err);
       if (err.response && (err.response.status === 401 || err.response.status === 403)) {
         localStorage.removeItem('token');
         navigate('/login');
-      } else if (err.response && err.response.status === 429) { // Rate limit error
+      } else if (err.response && err.response.status === 429) {
         setAiError('AI service is busy. Please try again in a moment.');
       } else {
         setAiError(err.response?.data?.message || 'Failed to get AI suggestions. Please try again.');
@@ -180,7 +177,6 @@ const DetailedItemView = () => {
       setAiLoading(false);
     }
   };
-  // --- END ADDED AI Feature Handlers ---
 
   useEffect(() => {
     fetchItemDetails();
@@ -280,7 +276,7 @@ const DetailedItemView = () => {
             <p className="text-vav-text font-medium">{item.condition}</p>
           </div>
           <div>
-            <p className="text-vav-text-secondary">Fully Functional:</p>
+            <p className="text-vav-text font-medium">Fully Functional:</p> {/* Removed ternary, now direct display */}
             <p className="text-vav-text font-medium">{item.isFullyFunctional ? 'Yes' : 'No'}</p>
           </div>
           {!item.isFullyFunctional && item.issuesDescription && (
@@ -377,18 +373,31 @@ const DetailedItemView = () => {
           {aiValueInsight && (
             <div className="bg-vav-background p-4 rounded-md mb-4 text-center">
               <p className="text-vav-text-secondary text-base mb-2">Suggested Market Value:</p>
-              <p className="text-vav-accent-primary text-xl font-bold mb-2">{aiValueInsight}</p>
-              <p className="text-vav-text-secondary text-xs">
-                Disclaimer: This is an automated estimate for informational purposes only and not a formal appraisal. Market values fluctuate.
-              </p>
+              {/* --- MODIFIED: Access properties of the object --- */}
+              {aiValueInsight.estimatedValueUSD && <p className="text-vav-accent-primary text-xl font-bold mb-2">{aiValueInsight.estimatedValueUSD}</p>}
+              {aiValueInsight.description && <p className="text-vav-text text-sm text-left whitespace-pre-wrap mb-2">{aiValueInsight.description}</p>}
+              {aiValueInsight.productionDates && <p className="text-vav-text text-sm text-left mb-2">Production Dates: {aiValueInsight.productionDates}</p>} {/* Added mb-2 for spacing */}
+              {aiValueInsight.marketDesirability && <p className="text-vav-text text-sm text-left mb-2">Market Desirability: {aiValueInsight.marketDesirability}</p>} {/* Added mb-2 */}
+              {aiValueInsight.disclaimer && <p className="text-vav-text-secondary text-xs">{aiValueInsight.disclaimer}</p>}
+              {aiValueInsight.error && <p className="text-red-500 text-sm">{aiValueInsight.error}</p>}
             </div>
           )}
 
           {aiSuggestions && (
             <div className="bg-vav-background p-4 rounded-md text-center">
               <p className="text-vav-text-secondary text-base mb-2">Related Gear Suggestions:</p>
-              <div className="text-vav-text text-left mx-auto max-w-md"> {/* Constrain width of list */}
-                <div dangerouslySetInnerHTML={{ __html: aiSuggestions.replace(/\n/g, '<br/>') }} /> {/* Render newline as break */}
+              <div className="text-vav-text text-left mx-auto max-w-md">
+                {aiSuggestions.suggestions && aiSuggestions.suggestions.length > 0 ? (
+                  <ul className="list-disc list-inside space-y-1">
+                    {aiSuggestions.suggestions.map((sugg, index) => (
+                      <li key={index}>
+                        <strong>{sugg.make} {sugg.model}</strong> - {sugg.reason}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>{aiSuggestions.error || "No specific suggestions available."}</p>
+                )}
               </div>
             </div>
           )}
