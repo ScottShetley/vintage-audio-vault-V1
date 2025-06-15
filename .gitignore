@@ -1,5 +1,59 @@
-# .gitignore in the root VintageAudioVault directory
+# Environment variables
+# Never commit .env files as they contain secrets!
 .env
+*.env
+
+# Node.js dependencies
+# These are installed via npm or yarn and should not be in the repository
 node_modules/
 client/node_modules/
-server/vintageaudiovault-gcp-bb385aed4648.json # This line will ignore your GCS key
+
+# Google Cloud Platform (GCP) Service Account Keys
+# Never commit these JSON key files.
+# This will ignore any .json file within the server/gcpjson/ directory.
+server/gcpjson/*.json
+
+# Build output / Distribution folders
+dist/
+build/
+out/
+.next/
+.nuxt/
+.svelte-kit/
+
+# Log files
+*.log
+logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE / Editor specific files
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Test reports
+coverage/
+.nyc_output/
+
+# Optional: Other sensitive files or large binaries
+# For example, if you had other types of credential files or large media assets
+# that shouldn't be in git, you'd add patterns for them here.
+# e.g., *.pem
+# e.g., assets/large-videos/*.mp4
