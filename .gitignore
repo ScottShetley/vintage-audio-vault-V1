@@ -2,4 +2,4 @@
 .env
 node_modules/
 client/node_modules/
-server/vintageaudiovaullt-gcp-bb385aed4648.json # This line will ignore your GCS key
+server/vintageaudiovault-gcp-bb385aed4648.json # This line will ignore your GCS key

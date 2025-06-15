@@ -52,7 +52,7 @@ const EditItemPage = () => {
             Authorization: `Bearer ${token}`,
           },
         });
-        const itemData = response.data.data.item;
+        const itemData = response.data; // Corrected: response.data is the item object
 
         // Pre-populate form fields with fetched data
         setMake(itemData.make || '');

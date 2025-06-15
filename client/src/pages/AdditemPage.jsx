@@ -19,7 +19,7 @@ const AddItemPage = () => {
   const [purchasePrice, setPurchasePrice] = useState('');
   const [userEstimatedValue, setUserEstimatedValue] = useState('');
   const [userEstimatedValueDate, setUserEstimatedValueDate] = useState('');
-  const [photos, setPhotos] = useState([]); // To store File objects
+  const [photo, setPhoto] = useState(null); // Changed to store a single File object
 
   // UI states
   const [loading, setLoading] = useState(false);
@@ -42,7 +42,7 @@ const AddItemPage = () => {
     setPurchasePrice('');
     setUserEstimatedValue('');
     setUserEstimatedValueDate('');
-    setPhotos([]);
+    setPhoto(null); // Clear single photo
     // Clear file input visually (this is a bit tricky, often requires resetting the input element itself)
     const fileInput = document.getElementById('photos');
     if (fileInput) {
@@ -81,8 +81,8 @@ const AddItemPage = () => {
     if (userEstimatedValue) formData.append('userEstimatedValue', userEstimatedValue);
     if (userEstimatedValueDate) formData.append('userEstimatedValueDate', userEstimatedValueDate);
 
-    for (let i = 0; i < photos.length; i++) {
-      formData.append('photos', photos[i]);
+    if (photo) { // If a photo is selected
+      formData.append('photo', photo); // Append with key 'photo'
     }
 
     try {
@@ -218,18 +218,18 @@ const AddItemPage = () => {
 
         {/* Photo Upload */}
         <div>
-          <label htmlFor="photos" className={labelClass}>Photos (select multiple)</label>
+          <label htmlFor="photo" className={labelClass}>Photo (select one)</label> {/* Changed label */}
           <input
             type="file"
-            id="photos"
-            multiple
+            id="photo"  // Changed id
+            // multiple // Removed multiple attribute
             accept="image/*"
-            onChange={(e) => setPhotos(Array.from(e.target.files))}
+            onChange={(e) => setPhoto(e.target.files[0])} // Set single photo
             className={`block w-full text-sm text-vav-text-secondary file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-vav-accent-primary file:text-vav-background hover:file:bg-vav-accent-secondary hover:file:text-white ${inputClass} p-0 border-dashed`}
           />
-           {photos.length > 0 && (
+           {photo && ( // Check if single photo exists
             <div className="mt-2 text-xs text-vav-text-secondary">
-              {photos.length} file(s) selected: {photos.map(f => f.name).join(', ')}
+              Selected file: {photo.name}
             </div>
           )}
         </div>

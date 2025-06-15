@@ -28,7 +28,7 @@ const DashboardPage = () => {
           Authorization: `Bearer ${token}`,
         },
       });
-      setItems(response.data.data.items); // Assuming response.data.data.items structure
+      setItems(response.data); // Corrected: response.data is the array of items
     } catch (err) {
       console.error('Failed to load items:', err);
       if (err.response && (err.response.status === 401 || err.response.status === 403)) {

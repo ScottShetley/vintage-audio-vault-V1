@@ -5,6 +5,7 @@ require ('dotenv').config ({path: '../.env'}); // Load environment variables fro
 const express = require ('express');
 const mongoose = require ('mongoose');
 const cors = require ('cors'); // --- THIS LINE IS CRUCIAL FOR CORS ---
+const {Storage} = require ('@google-cloud/storage'); // Import Google Cloud Storage
 
 const authRoutes = require ('./routes/authRoutes'); // Import authentication routes
 const audioItemRoutes = require ('./routes/audioItemRoutes'); // Import audio item routes
@@ -30,6 +31,46 @@ if (MONGODB_URI) {
 } else {
   console.warn (
     'MONGODB_URI not found in .env. MongoDB connection will be skipped.'
+  );
+}
+
+// --- Google Cloud Storage Initialization ---
+const serviceAccountKeyPath = process.env.GCP_KEY_PATH;
+
+if (serviceAccountKeyPath) {
+  console.log ('--- Debugging GCS Key Path ---');
+  console.log ('Path read from .env for GCS:', serviceAccountKeyPath);
+  try {
+    const fs = require ('fs');
+    console.log (
+      'Does file exist at this path?',
+      fs.existsSync (serviceAccountKeyPath)
+    );
+    if (!fs.existsSync (serviceAccountKeyPath)) {
+      console.error (
+        'ERROR: GCS service account key file not found at the specified path!'
+      );
+    }
+  } catch (err) {
+    console.error ('Error checking file existence:', err);
+  }
+  console.log ('------------------------------');
+
+  try {
+    const storage = new Storage ({
+      keyFilename: serviceAccountKeyPath,
+    });
+    // You can now use the 'storage' object in your routes for GCS operations
+    app.locals.gcsStorage = storage; // Make storage object available throughout app
+    console.log ('Google Cloud Storage initialized successfully.');
+  } catch (error) {
+    console.error ('Failed to initialize Google Cloud Storage:', error);
+    // Depending on criticality, you might want to exit the process
+    // process.exit(1);
+  }
+} else {
+  console.warn (
+    'GCP_KEY_PATH not found in .env. Google Cloud Storage will not be initialized.'
   );
 }
 
