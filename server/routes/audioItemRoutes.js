@@ -1,157 +1,231 @@
-// server/routes/audioItemRoutes.js
+// c:\Users\david\Desktop\projects\vintageaudiovault\server\routes\audioItemRoutes.js
+console.log ('--- audioItemRoutes.js module is being loaded ---');
+
 const express = require ('express');
-const mongoose = require ('mongoose');
 const multer = require ('multer');
+const {Readable} = require ('stream');
 const {protect} = require ('../middleware/authMiddleware');
 const AudioItem = require ('../models/AudioItem');
 const {
-  getAiValueInsight,
-  getRelatedGearSuggestions,
+  uploadToGcs,
+  deleteFromGcs,
+  getGeminiValuation,
+  getGeminiGearSuggestions,
+  getGeminiImageDescription, // Make sure this is correctly imported
 } = require ('../utils/geminiService');
 
 const router = express.Router ();
 
-// --- Multer and GCS Configuration ---
-const multerStorage = multer.memoryStorage (); // Use memoryStorage to process files before GCS
+// Multer configurations
 const upload = multer ({
-  storage: multerStorage,
-  limits: {fileSize: 10 * 1024 * 1024}, // 10MB file size limit per file
+  storage: multer.memoryStorage (),
+  limits: {fileSize: 5 * 1024 * 1024}, // 5MB
   fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith ('image/')) {
       cb (null, true);
     } else {
-      cb (new Error ('Not an image! Please upload only images.'), false);
+      cb (new Error ('Not an image! Please upload an image file.'), false);
     }
   },
 });
 
-// Middleware for single 'photo' upload (used by POST /api/items)
+const uploadMultiple = multer ({
+  storage: multer.memoryStorage (),
+  limits: {fileSize: 5 * 1024 * 1024}, // 5MB
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith ('image/')) {
+      cb (null, true);
+    } else {
+      cb (new Error ('Not an image! Please upload an image file.'), false);
+    }
+  },
+});
+
+// This Multer instance is intended for the analyze-wild-find route
+const uploadForAnalysis = multer ({
+  storage: multer.memoryStorage (),
+  limits: {fileSize: 10 * 1024 * 1024}, // 10MB
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith ('image/')) {
+      cb (null, true);
+    } else {
+      cb (new Error ('Not an image! Please upload an image file.'), false);
+    }
+  },
+});
+
+// GCS Middleware
 const uploadSingleToGcs = (req, res, next) => {
-  upload.single ('photo') (req, res, async err => {
-    if (err) {
-      if (err instanceof multer.MulterError) {
-        return res
-          .status (400)
-          .json ({
-            message: `File upload error: ${err.message}`,
-            code: err.code,
-          });
-      }
-      return res
-        .status (400)
-        .json ({message: 'Error processing file.', error: err.message});
-    }
-    if (!req.file) {
-      // If no file named 'photo' was uploaded
-      return next ();
-    }
-
-    const storage = req.app.locals.gcsStorage; // Get GCS storage client from app.locals
-    const bucketName = process.env.GCS_BUCKET_NAME;
-    if (!bucketName) {
-      console.error ('GCS_BUCKET_NAME environment variable not set.');
-      return next (new Error ('Server configuration error for file uploads.'));
-    }
-    const bucket = storage.bucket (bucketName);
-    const blobName = `${Date.now ()}-${req.file.originalname.replace (/\s+/g, '_')}`;
-    const blob = bucket.file (blobName);
-
-    const blobStream = blob.createWriteStream ({
-      resumable: false,
-      contentType: req.file.mimetype,
-    });
-
-    blobStream.on ('error', gcsErr => {
-      console.error ('GCS Upload Stream Error (single):', gcsErr);
-      req.file.gcsError = gcsErr; // Attach error for potential further handling
-      next (gcsErr);
-    });
-
-    blobStream.on ('finish', () => {
-      req.file.gcsUrl = `https://storage.googleapis.com/${bucketName}/${blobName}`;
+  if (!req.file) {
+    return next ();
+  }
+  const gcs = req.app.locals.gcs;
+  if (!gcs || !gcs.bucketName) {
+    console.error (
+      'GCS not initialized or bucketName missing in uploadSingleToGcs'
+    );
+    return next (new Error ('GCS configuration error.'));
+  }
+  uploadToGcs (req.file, gcs.bucketName, gcs.storage)
+    .then (gcsUrl => {
+      req.file.gcsUrl = gcsUrl;
       next ();
+    })
+    .catch (error => {
+      console.error ('Error in uploadSingleToGcs middleware:', error);
+      next (error);
     });
-
-    blobStream.end (req.file.buffer);
-  });
 };
 
-// Middleware for multiple 'photos' upload (used by PUT /api/items/:id)
-const uploadMultipleToGcs = (req, res, next) => {
-  upload.array ('photos', 5) (req, res, async err => {
-    // Expect up to 5 files in 'photos' field
-    if (err) {
-      if (err instanceof multer.MulterError) {
-        // This specific error means multer didn't find the 'photos' field, or another multer error occurred.
-        // If it's 'LIMIT_UNEXPECTED_FILE', it means the field name was wrong.
-        return res
-          .status (400)
-          .json ({
-            message: `File upload error: ${err.message}`,
-            code: err.code,
-            field: err.field,
-          });
-      }
-      return res
-        .status (400)
-        .json ({message: 'Error processing files.', error: err.message});
-    }
-    if (!req.files || req.files.length === 0) {
-      // If no files named 'photos' were uploaded
-      return next ();
-    }
-
-    const storage = req.app.locals.gcsStorage;
-    const bucketName = process.env.GCS_BUCKET_NAME;
-    if (!bucketName) {
-      console.error ('GCS_BUCKET_NAME environment variable not set.');
-      return next (new Error ('Server configuration error for file uploads.'));
-    }
-    const bucket = storage.bucket (bucketName);
-
-    req.gcsUrls = []; // Initialize an array to store GCS URLs for new files
-
-    try {
-      await Promise.all (
-        req.files.map (
-          file =>
-            new Promise ((resolve, reject) => {
-              const blobName = `${Date.now ()}-${file.originalname.replace (/\s+/g, '_')}`;
-              const blob = bucket.file (blobName);
-              const blobStream = blob.createWriteStream ({
-                resumable: false,
-                contentType: file.mimetype,
-              });
-
-              blobStream.on ('error', gcsErr => {
-                console.error (
-                  `GCS Upload Stream Error (multiple) for ${file.originalname}:`,
-                  gcsErr
-                );
-                reject (gcsErr);
-              });
-              blobStream.on ('finish', () => {
-                req.gcsUrls.push (
-                  `https://storage.googleapis.com/${bucketName}/${blobName}`
-                );
-                resolve ();
-              });
-              blobStream.end (file.buffer);
-            })
-        )
-      );
-      next ();
-    } catch (uploadError) {
-      console.error (
-        'Error during GCS multiple upload processing:',
-        uploadError
-      );
-      next (uploadError); // Pass error to Express error handler
-    }
-  });
+const uploadMultipleToGcs = async (req, res, next) => {
+  if (!req.files || req.files.length === 0) {
+    return next ();
+  }
+  const gcs = req.app.locals.gcs;
+  if (!gcs || !gcs.bucketName) {
+    console.error (
+      'GCS not initialized or bucketName missing in uploadMultipleToGcs'
+    );
+    return next (new Error ('GCS configuration error.'));
+  }
+  try {
+    const uploadPromises = req.files.map (file =>
+      uploadToGcs (file, gcs.bucketName, gcs.storage)
+    );
+    const gcsUrls = await Promise.all (uploadPromises);
+    req.gcsUrls = gcsUrls;
+    next ();
+  } catch (error) {
+    console.error ('Error in uploadMultipleToGcs middleware:', error);
+    next (error);
+  }
 };
 
 // --- ROUTE DEFINITIONS ---
+
+// POST /api/items/analyze-wild-find - Integrate Gemini AI Image Description
+router.post (
+  '/analyze-wild-find',
+  protect,
+  uploadForAnalysis.single ('image'),
+  async (req, res) => {
+    console.log (
+      '--- GEMINI ANALYSIS /api/items/analyze-wild-find route hit! ---'
+    );
+    console.log ('User from token:', req.user);
+
+    const gemini = req.app.locals.gemini;
+    if (!gemini) {
+      console.error ('Gemini AI service not available in /analyze-wild-find');
+      return res.status (500).json ({
+        message: 'Error: Gemini AI service not available.',
+        status: 'error',
+      });
+    }
+
+    if (!req.file) {
+      console.log ('No file received for Gemini analysis.');
+      return res.status (400).json ({
+        message: 'No image file uploaded for analysis.',
+        status: 'error',
+        userIdFromToken: req.user.id, // req.user is guaranteed by 'protect' middleware
+      });
+    }
+
+    console.log ('File received for Gemini analysis:', {
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+    });
+
+    try {
+      // Assuming getGeminiImageDescription takes the gemini client and the file object (with buffer)
+      const description = await getGeminiImageDescription (gemini, req.file);
+
+      console.log ('Gemini AI Description:', description);
+
+      res.status (200).json ({
+        message: 'Wild Find analysis successful.',
+        status: 'success',
+        userIdFromToken: req.user.id, // req.user.id is guaranteed by 'protect'
+        fileDetails: {
+          name: req.file.originalname,
+          type: req.file.mimetype,
+          size: req.file.size,
+        },
+        analysisResult: {
+          description: description,
+          // You can add more fields here as your AI service provides them
+        },
+      });
+    } catch (error) {
+      console.error ('Error during Gemini AI image description:', error);
+      res.status (500).json ({
+        message: 'Error performing AI analysis on the image.',
+        status: 'error',
+        errorDetails: error.message, // Provide the specific error message
+        userIdFromToken: req.user.id, // req.user is guaranteed by 'protect' middleware
+      });
+    }
+  }
+);
+
+// --- CRUD Operations for Audio Items ---
+
+// POST /api/items - Create a new audio item
+router.post (
+  '/',
+  protect,
+  upload.single ('photo'),
+  uploadSingleToGcs,
+  async (req, res) => {
+    try {
+      const {
+        name,
+        type,
+        brand,
+        model,
+        serialNumber,
+        purchaseDate,
+        purchasePrice,
+        description,
+        condition,
+        isFullyFunctional,
+        isForSale,
+        salePrice,
+        notes,
+      } = req.body;
+      const newItemData = {
+        user: req.user.id,
+        name,
+        type,
+        brand,
+        model,
+        serialNumber,
+        purchaseDate,
+        purchasePrice: purchasePrice ? Number (purchasePrice) : undefined,
+        description,
+        condition,
+        isFullyFunctional: String (isFullyFunctional).toLowerCase () === 'true',
+        isForSale: String (isForSale).toLowerCase () === 'true',
+        salePrice: salePrice ? Number (salePrice) : undefined,
+        notes,
+        photoUrls: req.file && req.file.gcsUrl ? [req.file.gcsUrl] : [],
+      };
+      const audioItem = new AudioItem (newItemData);
+      await audioItem.save ();
+      res.status (201).json (audioItem);
+    } catch (error) {
+      console.error ('Error creating audio item:', error);
+      if (error.name === 'ValidationError') {
+        return res
+          .status (400)
+          .json ({message: 'Validation Error', errors: error.errors});
+      }
+      res.status (500).json ({message: 'Server error while creating item.'});
+    }
+  }
+);
 
 // GET /api/items - Get all audio items for the logged-in user
 router.get ('/', protect, async (req, res) => {
@@ -159,328 +233,216 @@ router.get ('/', protect, async (req, res) => {
     const items = await AudioItem.find ({user: req.user.id}).sort ({
       createdAt: -1,
     });
-    res.status (200).json (items);
+    res.json (items);
   } catch (error) {
-    console.error ('GET /api/items error:', error);
-    res
-      .status (500)
-      .json ({message: 'Server error fetching items.', error: error.message});
+    console.error ('Error fetching items:', error);
+    res.status (500).json ({message: 'Server error while fetching items.'});
   }
 });
 
-// GET /api/items/:id - Get a single audio item by its ID
+// GET /api/items/:id - Get a single audio item by ID
 router.get ('/:id', protect, async (req, res) => {
   try {
-    if (!mongoose.Types.ObjectId.isValid (req.params.id)) {
-      return res.status (400).json ({message: 'Invalid item ID.'});
-    }
     const item = await AudioItem.findById (req.params.id);
     if (!item) {
-      return res.status (404).json ({message: 'Item not found.'});
+      return res.status (404).json ({message: 'Item not found'});
     }
     if (item.user.toString () !== req.user.id) {
-      return res
-        .status (401)
-        .json ({message: 'Not authorized to view this item.'});
+      return res.status (401).json ({message: 'User not authorized'});
     }
-    res.status (200).json (item);
+    res.json (item);
   } catch (error) {
-    console.error (`GET /api/items/${req.params.id} error:`, error);
-    res
-      .status (500)
-      .json ({message: 'Server error fetching item.', error: error.message});
-  }
-});
-
-// POST /api/items - Create a new audio item (with image upload)
-router.post ('/', protect, uploadSingleToGcs, async (req, res) => {
-  try {
-    const {
-      make,
-      model,
-      itemType,
-      condition,
-      isFullyFunctional,
-      issuesDescription,
-      specifications,
-      notes,
-      purchaseDate,
-      purchasePrice,
-      userEstimatedValue,
-      userEstimatedValueDate, // Added userEstimatedValueDate
-    } = req.body;
-
-    if (
-      !make ||
-      !model ||
-      !itemType ||
-      !condition ||
-      typeof req.body.isFullyFunctional === 'undefined'
-    ) {
-      return res.status (400).json ({
-        message: 'Please provide all required fields: make, model, itemType, condition, and functional status.',
-      });
-    }
-
-    let functionalStatus = String (isFullyFunctional).toLowerCase () === 'true';
-
-    const newItemData = {
-      user: req.user.id,
-      make,
-      model,
-      itemType,
-      condition,
-      isFullyFunctional: functionalStatus,
-      issuesDescription: functionalStatus ? undefined : issuesDescription,
-      specifications,
-      notes,
-      purchaseDate: purchaseDate || undefined,
-      purchasePrice: purchasePrice ? parseFloat (purchasePrice) : undefined,
-      userEstimatedValue: userEstimatedValue
-        ? parseFloat (userEstimatedValue)
-        : undefined,
-      userEstimatedValueDate: userEstimatedValueDate || undefined, // Use value from req.body
-      photoUrls: req.file && req.file.gcsUrl ? [req.file.gcsUrl] : [],
-    };
-
-    Object.keys (newItemData).forEach (
-      key => newItemData[key] === undefined && delete newItemData[key]
-    );
-
-    const newItem = await AudioItem.create (newItemData);
-    res.status (201).json (newItem);
-  } catch (error) {
-    if (error.name === 'ValidationError') {
-      console.error (
-        'CREATE ITEM VALIDATION ERROR:',
-        JSON.stringify (error.errors, null, 2)
-      );
-      return res.status (400).json ({
-        message: 'Validation Error: Could not create item. Please check your input.',
-        errors: error.errors,
-      });
-    }
-    console.error ('CREATE ITEM ERROR:', error);
-    res
-      .status (500)
-      .json ({message: 'Server error creating item.', error: error.message});
-  }
-});
-
-// PUT /api/items/:id - Update an audio item
-router.put ('/:id', protect, uploadMultipleToGcs, async (req, res) => {
-  try {
-    if (!mongoose.Types.ObjectId.isValid (req.params.id)) {
-      return res.status (400).json ({message: 'Invalid item ID.'});
-    }
-    let item = await AudioItem.findById (req.params.id);
-    if (!item) {
-      return res.status (404).json ({message: 'Item not found.'});
-    }
-    if (item.user.toString () !== req.user.id) {
-      return res
-        .status (401)
-        .json ({message: 'Not authorized to update this item.'});
-    }
-
-    const updateFields = {...req.body}; // Start with text fields from body
-
-    // Handle photo URLs: merge existingPhotoUrls with new GCS URLs
-    let combinedPhotoUrls = [];
-    if (updateFields.existingPhotoUrls) {
-      combinedPhotoUrls = Array.isArray (updateFields.existingPhotoUrls)
-        ? updateFields.existingPhotoUrls
-        : [updateFields.existingPhotoUrls]; // Ensure it's an array
-    }
-
-    if (req.gcsUrls && req.gcsUrls.length > 0) {
-      // req.gcsUrls is populated by uploadMultipleToGcs
-      combinedPhotoUrls.push (...req.gcsUrls);
-    }
-    updateFields.photoUrls = combinedPhotoUrls;
-    delete updateFields.existingPhotoUrls; // Not part of the schema
-
-    // Handle boolean conversion for isFullyFunctional and isForSale
-    if (updateFields.hasOwnProperty ('isFullyFunctional')) {
-      updateFields.isFullyFunctional =
-        String (updateFields.isFullyFunctional).toLowerCase () === 'true';
-    }
-    if (updateFields.hasOwnProperty ('isForSale')) {
-      updateFields.isForSale =
-        String (updateFields.isForSale).toLowerCase () === 'true';
-    }
-    // Clear issuesDescription if item is marked as fully functional
-    if (updateFields.isFullyFunctional === true) {
-      updateFields.issuesDescription = ''; // Or undefined, depending on schema preference for empty
-    }
-
-    // Type conversion for numeric fields
-    ['purchasePrice', 'userEstimatedValue', 'askingPrice'].forEach (field => {
-      if (updateFields.hasOwnProperty (field)) {
-        if (updateFields[field] === '' || updateFields[field] === null) {
-          updateFields[field] = null; // Or undefined if schema default is desired
-        } else {
-          const num = parseFloat (updateFields[field]);
-          updateFields[field] = isNaN (num) ? item[field] : num; // Revert to old value if NaN, or handle error
-        }
-      }
-    });
-    // Type conversion for date fields
-    [
-      'purchaseDate',
-      'userEstimatedValueDate',
-      'aiLastEvaluated',
-    ].forEach (field => {
-      if (updateFields.hasOwnProperty (field) && updateFields[field]) {
-        const date = new Date (updateFields[field]);
-        updateFields[field] = isNaN (date.getTime ()) ? item[field] : date; // Revert if invalid date
-      } else if (updateFields.hasOwnProperty (field) && !updateFields[field]) {
-        updateFields[field] = null; // Set to null if empty string or null sent
-      }
-    });
-
-    const updatedItem = await AudioItem.findByIdAndUpdate (
-      req.params.id,
-      {$set: updateFields}, // Use $set to apply updates
-      {new: true, runValidators: true, context: 'query'}
-    );
-
-    if (!updatedItem) {
-      // Should not happen if item was found earlier, but good check
+    console.error ('Error fetching item by ID:', error);
+    if (error.kind === 'ObjectId') {
       return res
         .status (404)
-        .json ({message: 'Item not found after update attempt.'});
+        .json ({message: 'Item not found (invalid ID format)'});
     }
-
-    res.status (200).json (updatedItem);
-  } catch (error) {
-    if (error.name === 'ValidationError') {
-      console.error (
-        'UPDATE ITEM VALIDATION ERROR:',
-        JSON.stringify (error.errors, null, 2)
-      );
-      return res.status (400).json ({
-        message: 'Validation Error: Could not update item. Please check your input.',
-        errors: error.errors,
-      });
-    }
-    console.error (
-      'UPDATE ITEM ERROR:',
-      error.name,
-      error.message,
-      error.stack
-    );
     res
       .status (500)
-      .json ({message: 'Server error updating item.', error: error.message});
+      .json ({message: 'Server error while fetching item by ID.'});
   }
 });
 
-// DELETE /api/items/:id - Delete an audio item
+// PUT /api/items/:id - Update an audio item by ID
+router.put (
+  '/:id',
+  protect,
+  uploadMultiple.array ('newPhotos', 5), // Allows uploading up to 5 new photos
+  uploadMultipleToGcs,
+  async (req, res) => {
+    try {
+      const item = await AudioItem.findById (req.params.id);
+      if (!item) {
+        return res.status (404).json ({message: 'Item not found'});
+      }
+      if (item.user.toString () !== req.user.id) {
+        return res.status (401).json ({message: 'User not authorized'});
+      }
+
+      const updateFields = {...req.body};
+
+      // Handle photo updates:
+      // - req.gcsUrls contains URLs of newly uploaded photos.
+      // - req.body.existingPhotoUrls (if sent by client) contains URLs client wants to keep.
+      const newPhotosUploaded = req.gcsUrls && req.gcsUrls.length > 0;
+      const clientManagesExistingPhotos = updateFields.hasOwnProperty (
+        'existingPhotoUrls'
+      );
+
+      if (newPhotosUploaded || clientManagesExistingPhotos) {
+        let basePhotoUrls = [];
+        if (clientManagesExistingPhotos) {
+          // Client is explicitly stating which existing photos to keep
+          const clientExistingUrls = updateFields.existingPhotoUrls;
+          basePhotoUrls = Array.isArray (clientExistingUrls)
+            ? clientExistingUrls
+            : clientExistingUrls // Handle single string or array
+                ? [clientExistingUrls]
+                : [];
+        } else if (newPhotosUploaded) {
+          // Client is only adding new photos, keep all existing ones
+          basePhotoUrls = item.photoUrls || [];
+        }
+
+        let finalPhotoUrls = [...basePhotoUrls];
+        if (newPhotosUploaded) {
+          finalPhotoUrls.push (...req.gcsUrls);
+        }
+        updateFields.photoUrls = finalPhotoUrls;
+      }
+
+      // Remove existingPhotoUrls from updateFields as it's not a schema field
+      if (clientManagesExistingPhotos) {
+        delete updateFields.existingPhotoUrls;
+      }
+
+      // Convert boolean strings to actual booleans
+      if (updateFields.hasOwnProperty ('isFullyFunctional')) {
+        updateFields.isFullyFunctional =
+          String (updateFields.isFullyFunctional).toLowerCase () === 'true';
+      }
+      if (updateFields.hasOwnProperty ('isForSale')) {
+        updateFields.isForSale =
+          String (updateFields.isForSale).toLowerCase () === 'true';
+      }
+      // Convert price strings to numbers
+      if (updateFields.purchasePrice) {
+        updateFields.purchasePrice = Number (updateFields.purchasePrice);
+      }
+      if (updateFields.salePrice) {
+        updateFields.salePrice = Number (updateFields.salePrice);
+      }
+
+      const updatedItem = await AudioItem.findByIdAndUpdate (
+        req.params.id,
+        {$set: updateFields},
+        {new: true, runValidators: true}
+      );
+      res.json (updatedItem);
+    } catch (error) {
+      console.error ('Error updating item:', error);
+      if (error.name === 'ValidationError') {
+        return res
+          .status (400)
+          .json ({message: 'Validation Error', errors: error.errors});
+      }
+      if (error.kind === 'ObjectId') {
+        return res
+          .status (404)
+          .json ({message: 'Item not found (invalid ID format)'});
+      }
+      res.status (500).json ({message: 'Server error while updating item.'});
+    }
+  }
+);
+
+// DELETE /api/items/:id - Delete an audio item by ID
 router.delete ('/:id', protect, async (req, res) => {
   try {
-    if (!mongoose.Types.ObjectId.isValid (req.params.id)) {
-      return res.status (400).json ({message: 'Invalid item ID.'});
-    }
     const item = await AudioItem.findById (req.params.id);
     if (!item) {
-      return res.status (404).json ({message: 'Item not found.'});
+      return res.status (404).json ({message: 'Item not found'});
     }
     if (item.user.toString () !== req.user.id) {
-      return res
-        .status (401)
-        .json ({message: 'Not authorized to delete this item.'});
+      return res.status (401).json ({message: 'User not authorized'});
     }
 
-    // Delete images from GCS
-    if (item.photoUrls && item.photoUrls.length > 0) {
-      const storage = req.app.locals.gcsStorage;
-      const bucketName = process.env.GCS_BUCKET_NAME;
-      if (bucketName) {
-        for (const url of item.photoUrls) {
-          try {
-            const filename = url.split (`${bucketName}/`)[1];
-            if (filename) {
-              await storage.bucket (bucketName).file (filename).delete ();
-              console.log (`Deleted GCS object: ${filename}`);
-            }
-          } catch (gcsError) {
-            console.error (`Failed to delete GCS object ${url}:`, gcsError);
-            // Decide if you want to proceed with DB deletion even if GCS deletion fails
-          }
-        }
-      } else {
-        console.warn ('GCS_BUCKET_NAME not set. Skipping GCS file deletion.');
-      }
+    // Delete associated images from GCS
+    const gcs = req.app.locals.gcs;
+    if (item.photoUrls && item.photoUrls.length > 0 && gcs && gcs.bucketName) {
+      const deletePromises = item.photoUrls.map (url =>
+        deleteFromGcs (url, gcs.bucketName, gcs.storage)
+      );
+      await Promise.all (deletePromises).catch (err => {
+        // Log error but proceed with item deletion from DB
+        console.error (
+          'Error deleting some images from GCS, but proceeding with item deletion:',
+          err
+        );
+      });
     }
 
     await AudioItem.findByIdAndDelete (req.params.id);
-    res
-      .status (200)
-      .json ({message: 'Item deleted successfully.', id: req.params.id});
+    res.json ({message: 'Item removed successfully'});
   } catch (error) {
-    console.error ('DELETE /api/items/:id error:', error);
-    res
-      .status (500)
-      .json ({message: 'Server error deleting item.', error: error.message});
+    console.error ('Error deleting item:', error);
+    if (error.kind === 'ObjectId') {
+      return res
+        .status (404)
+        .json ({message: 'Item not found (invalid ID format)'});
+    }
+    res.status (500).json ({message: 'Server error while deleting item.'});
   }
 });
 
-// PATCH /api/items/:id/ai-evaluation - Get AI evaluation for an item
-router.patch ('/:id/ai-evaluation', protect, async (req, res) => {
+// --- AI Feature Routes ---
+
+// POST /api/items/:id/ai-valuation - Get AI valuation for an item
+router.post ('/:id/ai-valuation', protect, async (req, res) => {
   try {
-    if (!mongoose.Types.ObjectId.isValid (req.params.id)) {
-      return res.status (400).json ({message: 'Invalid item ID.'});
-    }
     const item = await AudioItem.findById (req.params.id);
-    if (!item) {
-      return res.status (404).json ({message: 'Item not found.'});
-    }
-    if (item.user.toString () !== req.user.id) {
-      return res.status (401).json ({message: 'Not authorized for this item.'});
-    }
+    if (!item) return res.status (404).json ({message: 'Item not found'});
+    if (item.user.toString () !== req.user.id)
+      return res.status (401).json ({message: 'Not authorized'});
 
-    const itemDescription = `${item.make} ${item.model} (${item.itemType || 'N/A'}) - Condition: ${item.condition || 'N/A'}. Specifications: ${item.specifications || 'N/A'}. Notes: ${item.notes || 'N/A'}`;
-    const photoUrlsForAI = item.photoUrls && item.photoUrls.length > 0
-      ? item.photoUrls
-      : undefined;
-
-    const [valueInsight, suggestions] = await Promise.all ([
-      getAiValueInsight (item.make, item.model, item.condition, photoUrlsForAI),
-      getRelatedGearSuggestions (
-        item.make,
-        item.model,
-        item.itemType,
-        photoUrlsForAI
-      ),
-    ]);
-
-    item.aiValueInsight = valueInsight;
-    item.aiSuggestions = suggestions;
-    item.aiLastEvaluated = new Date ();
-    const updatedItem = await item.save ();
-    res.status (200).json (updatedItem);
-  } catch (error) {
-    console.error ('AI EVALUATION ERROR:', error);
-    // Check for specific Gemini API errors if possible, e.g., rate limits
-    if (
-      error.message &&
-      (error.message.includes ('429') ||
-        error.message.toLowerCase ().includes ('rate limit'))
-    ) {
+    const gemini = req.app.locals.gemini;
+    if (!gemini)
       return res
-        .status (429)
-        .json ({
-          message: 'AI service is busy or rate limited. Please try again later.',
-          error: error.message,
-        });
-    }
+        .status (500)
+        .json ({message: 'Gemini AI service not available.'});
+
+    const valuation = await getGeminiValuation (gemini, item);
+    res.json ({valuation});
+  } catch (error) {
+    console.error ('Error getting AI valuation:', error);
     res
       .status (500)
-      .json ({
-        message: 'Server error during AI evaluation.',
-        error: error.message,
-      });
+      .json ({message: 'Error getting AI valuation', error: error.message});
+  }
+});
+
+// POST /api/items/:id/ai-suggestions - Get AI gear suggestions for an item
+router.post ('/:id/ai-suggestions', protect, async (req, res) => {
+  try {
+    const item = await AudioItem.findById (req.params.id);
+    if (!item) return res.status (404).json ({message: 'Item not found'});
+    if (item.user.toString () !== req.user.id)
+      return res.status (401).json ({message: 'Not authorized'});
+
+    const gemini = req.app.locals.gemini;
+    if (!gemini)
+      return res
+        .status (500)
+        .json ({message: 'Gemini AI service not available.'});
+
+    const suggestions = await getGeminiGearSuggestions (gemini, item);
+    res.json ({suggestions});
+  } catch (error) {
+    console.error ('Error getting AI suggestions:', error);
+    res
+      .status (500)
+      .json ({message: 'Error getting AI suggestions', error: error.message});
   }
 });
 

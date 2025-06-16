@@ -359,35 +359,4 @@ const EditItemPage = () => {
   );
 };
 
-export default EditItemPage;// Example in your edit item submit handler
-const handleSubmit = async (event) => {
-  event.preventDefault();
-  const formData = new FormData();
-  formData.append('make', make);
-  formData.append('model', model);
-  // ... append other fields ...
-  if (imageFile) {
-    formData.append('itemImage', imageFile); // 'itemImage' should match your multer field name
-  }
-
-  console.log('Submitting item update. FormData entries:');
-  for (let [key, value] of formData.entries()) {
-    console.log(key, value);
-  }
-  // Or if not using FormData for all fields, log the plain object
-  // console.log('Submitting item update. Payload:', updateData);
-
-  try {
-    // Your axios.put or axios.patch call here
-    await axios.put(`http://localhost:5000/api/items/${id}`, formData, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        // 'Content-Type': 'multipart/form-data', // Axios should set this automatically for FormData
-      },
-    });
-    // ... success handling ...
-  } catch (err) {
-    console.error('Failed to update item:', err);
-    // ... error handling ...
-  }
-};
+export default EditItemPage;

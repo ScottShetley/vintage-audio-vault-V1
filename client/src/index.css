@@ -1,4 +1,4 @@
-/* client/src/index.css */
+/* c:\Users\david\Desktop\projects\vintageaudiovault\client\src\index.css */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -6,3 +6,21 @@
 /* You can keep your existing global CSS below these directives if you have any */
 /* For Vintage Audio Vault, we rely on Tailwind classes in JSX for all styling. */
 /* This file should remain minimal, only containing Tailwind directives and custom base styles if absolutely necessary. */
+
+:root {
+    /* VAV Theme Colors from tailwind.config.js */
+    --vav-background: #1A1A1A;
+    --vav-content-card: #2C2C2C;
+    --vav-text: #E0E0E0;
+    --vav-accent-primary: #C2B280;
+    --vav-accent-secondary: #800020;
+    --vav-text-secondary: #B0B0B0;
+
+    /* Standard Colors used in WildFindPage.module.css */
+    /* These correspond to Tailwind's default color palette. */
+    /* You can adjust these if your project uses different shades for these semantic names. */
+    --color-red-500: #ef4444;
+    /* Tailwind red-500 */
+    --color-gray-500: #6b7280;
+    /* Tailwind gray-500 */
+}

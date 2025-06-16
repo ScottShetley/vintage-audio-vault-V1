@@ -1,4 +1,4 @@
-// server/utils/geminiService.js
+// c:\Users\david\Desktop\projects\vintageaudiovault\server\utils\geminiService.js
 const {
   GoogleGenerativeAI,
   HarmBlockThreshold,
@@ -290,7 +290,49 @@ Provide your suggestions in the specified JSON format.`;
   }
 }
 
+/**
+ * Generates a description for an image using the Gemini AI model.
+ * @param {GoogleGenerativeAI} geminiInstance - The initialized Gemini AI client (passed from app.locals.gemini).
+ * @param {object} fileObject - The file object from Multer (req.file), containing the image buffer and mimetype.
+ * @returns {Promise<string>} A promise that resolves to the image description.
+ */
+async function getGeminiImageDescription (geminiInstance, fileObject) {
+  try {
+    if (!geminiInstance) {
+      throw new Error ('Gemini AI instance is not provided.');
+    }
+    if (!fileObject || !fileObject.buffer || !fileObject.mimetype) {
+      throw new Error ('Invalid file object provided for image description.');
+    }
+
+    const model = geminiInstance.getGenerativeModel ({
+      model: 'gemini-1.5-flash',
+    });
+
+    const imagePart = {
+      inlineData: {
+        data: fileObject.buffer.toString ('base64'), // Convert buffer to base64
+        mimeType: fileObject.mimetype,
+      },
+    };
+
+    const prompt = `Describe this image in detail. What is it? What are its key features? If it's audio equipment, try to identify the make and model if possible.
+Based on the visual information, provide an assessment of its apparent physical condition (e.g., excellent, good, fair, poor, with brief reasoning).
+If possible, also give a very general indication of its potential market value, including an estimated dollar value range (e.g., $50 - $150 USD, or $500 - $800 USD) if you can infer it from the visual information and typical market understanding for such items.
+Always include a disclaimer that this visual assessment and any value indication are not a formal appraisal and actual value depends on many factors including functionality, internal condition, and market demand.`;
+
+    const result = await model.generateContent ([prompt, imagePart]);
+    const response = await result.response;
+    const text = response.text ();
+    return text;
+  } catch (error) {
+    console.error ('Error in getGeminiImageDescription:', error);
+    throw new Error (`Gemini AI image description failed: ${error.message}`);
+  }
+}
+
 module.exports = {
   getAiValueInsight,
   getRelatedGearSuggestions,
+  getGeminiImageDescription,
 };

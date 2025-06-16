@@ -1,3 +1,4 @@
+// c:\Users\david\Desktop\projects\vintageaudiovault\server\routes\authRoutes.js
 const express = require ('express');
 const jwt = require ('jsonwebtoken');
 const User = require ('../models/User'); // Adjust path as per your project structure
@@ -41,18 +42,16 @@ router.post ('/register', async (req, res) => {
 
     // 3. Create new user (password will be hashed by the pre-save hook in User model)
     const newUser = await User.create ({
-      email,
-      password,
+      email: email,
+      password: password,
     });
 
     // 4. Generate JWT
     const token = signToken (newUser._id);
 
     // 5. Send response (excluding password)
-    // Mongoose's .save() or .create() returns the document, but password is not selected by default.
-    // If you want to explicitly remove it or send specific fields:
     const userResponse = {...newUser.toObject ()};
-    delete userResponse.password; // Ensure password is not sent, even if somehow selected
+    delete userResponse.password;
     delete userResponse.passwordResetToken;
     delete userResponse.passwordResetExpires;
     delete userResponse.verificationToken;

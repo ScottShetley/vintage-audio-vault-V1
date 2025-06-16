@@ -10,6 +10,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import AddItemPage from './pages/AddItemPage';
 import DetailedItemView from './pages/DetailedItemView';
 import EditItemPage from './pages/EditItemPage';
+import WildFindPage from './pages/WildFindPage'; // Import the new WildFindPage
 
 // Your main CSS file which now includes Tailwind directives
 import './index.css';
@@ -47,6 +48,15 @@ function App () {
                 Dashboard
               </Link>
             </li>
+            {/* Add link for the new Wild Find page */}
+            <li>
+              <Link
+                to="/wild-find"
+                className="text-vav-accent-primary text-lg font-bold no-underline hover:text-vav-text transition-colors"
+              >
+                Wild Find
+              </Link>
+            </li>
           </ul>
         </nav>
 
@@ -73,6 +83,9 @@ function App () {
               <Route path="/add-item" element={<AddItemPage />} />
               <Route path="/item/:id" element={<DetailedItemView />} />
               <Route path="/edit-item/:id" element={<EditItemPage />} />
+              <Route path="/wild-find" element={<WildFindPage />} />
+              {/* The comment below was slightly misplaced due to the {' '} - it's fine as is or can be moved/removed */}
+              {/* Add the new protected route for WildFindPage */}
             </Route>
 
             {/* Catch-all route for 404s */}
