@@ -10,7 +10,8 @@ import ProtectedRoute from './components/ProtectedRoute';
 import AddItemPage from './pages/AddItemPage';
 import DetailedItemView from './pages/DetailedItemView';
 import EditItemPage from './pages/EditItemPage';
-import WildFindPage from './pages/WildFindPage'; // Import the new WildFindPage
+import WildFindPage from './pages/WildFindPage';
+import AdAnalyzerPage from './pages/AdAnalyzerPage'; // Import the new AdAnalyzerPage
 
 // Your main CSS file which now includes Tailwind directives
 import './index.css';
@@ -48,13 +49,22 @@ function App () {
                 Dashboard
               </Link>
             </li>
-            {/* Add link for the new Wild Find page */}
+            {/* Add link for the Wild Find page */}
             <li>
               <Link
                 to="/wild-find"
                 className="text-vav-accent-primary text-lg font-bold no-underline hover:text-vav-text transition-colors"
               >
                 Wild Find
+              </Link>
+            </li>
+            {/* Add link for the new Ad Analyzer page */}
+            <li>
+              <Link
+                to="/ad-analyzer"
+                className="text-vav-accent-primary text-lg font-bold no-underline hover:text-vav-text transition-colors"
+              >
+                Ad Analyzer
               </Link>
             </li>
           </ul>
@@ -84,8 +94,9 @@ function App () {
               <Route path="/item/:id" element={<DetailedItemView />} />
               <Route path="/edit-item/:id" element={<EditItemPage />} />
               <Route path="/wild-find" element={<WildFindPage />} />
-              {/* The comment below was slightly misplaced due to the {' '} - it's fine as is or can be moved/removed */}
-              {/* Add the new protected route for WildFindPage */}
+              <Route path="/ad-analyzer" element={<AdAnalyzerPage />} />
+              {' '}
+              {/* Add the new protected route for AdAnalyzerPage */}
             </Route>
 
             {/* Catch-all route for 404s */}

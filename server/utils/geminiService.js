@@ -89,34 +89,16 @@ If you cannot identify any items, return an empty array.`;
   };
 
   try {
-    // *** CHANGED TO proModel for potentially better identification accuracy ***
     const result = await proModel.generateContent ({
       contents: [{role: 'user', parts: [imagePart, {text: prompt}]}],
       generationConfig: {
         responseMimeType: 'application/json',
         responseSchema: schema,
-        // Consider adding temperature if results are too rigid or too creative
-        // temperature: 0.6,
       },
     });
     return JSON.parse (result.response.text ());
   } catch (error) {
     console.error ('Error in getVisualAnalysis with proModel:', error);
-    // Fallback to flashModel if proModel fails for some reason (optional, or just let it error)
-    // console.log('Falling back to flashModel for getVisualAnalysis');
-    // try {
-    //   const fallbackResult = await flashModel.generateContent ({
-    //     contents: [{role: 'user', parts: [imagePart, {text: prompt}]}],
-    //     generationConfig: {
-    //       responseMimeType: 'application/json',
-    //       responseSchema: schema,
-    //     },
-    //   });
-    //   return JSON.parse (fallbackResult.response.text ());
-    // } catch (fallbackError) {
-    //   console.error ('Error in getVisualAnalysis with flashModel fallback:', fallbackError);
-    //   throw new Error (`Gemini AI visual analysis failed on both models: ${fallbackError.message}`);
-    // }
     throw new Error (`Gemini AI visual analysis failed: ${error.message}`);
   }
 }
@@ -150,7 +132,6 @@ async function getFactualFeatures (make, model) {
         },
       },
       message: {
-        // Optional message field
         type: 'STRING',
         description: 'A message, e.g., if features/specs cannot be provided for a non-specific model.',
       },
@@ -180,7 +161,7 @@ Item Context:
 Make: ${visualData.make}
 Model: ${visualData.model}
 Key Features: ${factualData.keyFeatures && factualData.keyFeatures.length > 0 ? factualData.keyFeatures.join (', ') : 'Not available or not specific.'}
-Observed Condition: ${visualData.conditionDescription}
+Observed Condition (from image analysis): ${visualData.conditionDescription}
 ${factualData.message ? 'Note from feature analysis: ' + factualData.message : ''}
 
 Your Task: Based on ALL the information above, provide an estimated market value range in USD.
@@ -217,6 +198,162 @@ Include a standard disclaimer. Return your response in the specified JSON format
   } catch (error) {
     console.error ('Error in getSynthesizedValuation:', error);
     throw new Error (`Gemini AI valuation synthesis failed: ${error.message}`);
+  }
+}
+
+// --- NEW AI FUNCTIONS FOR AD ANALYZER ---
+
+async function analyzeAdText (adTitle, adDescription) {
+  const prompt = `Analyze the following vintage audio equipment ad title and description.
+Your goal is to extract specific information.
+
+Ad Title: "${adTitle}"
+Ad Description: "${adDescription}"
+
+Tasks:
+1.  Identify the Make: Determine the manufacturer of the equipment. If not clearly stated, use "Unspecified Make".
+2.  Identify the Model: Determine the model name or number. If not clearly stated, use "Unspecified Model".
+3.  Summarize Seller's Stated Condition: Provide a concise summary of how the seller describes the item's condition, functionality, and any cosmetic issues.
+4.  List Mentioned Key Features: Extract a list of key features or selling points mentioned by the seller (e.g., "fully recapped", "original remote", "wood cabinet"). If none, return an empty array.
+5.  List Mentioned Problems/Missing Parts: Extract a list of any explicitly stated problems, damages, or missing components. If none, return an empty array.
+
+Return your response in the specified JSON format. If a field cannot be determined, use an appropriate placeholder or an empty array for lists.`;
+
+  const schema = {
+    type: 'OBJECT',
+    properties: {
+      extractedMake: {
+        type: 'STRING',
+        description: 'The make of the equipment as extracted from the text, or "Unspecified Make".',
+      },
+      extractedModel: {
+        type: 'STRING',
+        description: 'The model of the equipment as extracted from the text, or "Unspecified Model".',
+      },
+      sellerConditionSummary: {
+        type: 'STRING',
+        description: "A summary of the seller's description of the item's condition and functionality.",
+      },
+      mentionedFeatures: {
+        type: 'ARRAY',
+        items: {type: 'STRING'},
+        description: 'A list of key features mentioned by the seller.',
+      },
+      mentionedProblems: {
+        type: 'ARRAY',
+        items: {type: 'STRING'},
+        description: 'A list of problems or missing parts mentioned by the seller.',
+      },
+    },
+    required: [
+      'extractedMake',
+      'extractedModel',
+      'sellerConditionSummary',
+      'mentionedFeatures',
+      'mentionedProblems',
+    ],
+  };
+
+  try {
+    const result = await proModel.generateContent ({
+      contents: [{role: 'user', parts: [{text: prompt}]}],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: schema,
+        temperature: 0.3,
+      },
+    });
+    return JSON.parse (result.response.text ());
+  } catch (error) {
+    console.error ('Error in analyzeAdText:', error);
+    // Return a default structure on error to prevent cascading failures
+    return {
+      extractedMake: 'Error processing text',
+      extractedModel: 'Error processing text',
+      sellerConditionSummary: "Could not analyze seller's text due to an error.",
+      mentionedFeatures: [],
+      mentionedProblems: [],
+      error: `Gemini AI ad text analysis failed: ${error.message}`,
+    };
+  }
+}
+
+// Wrapper to include original description for context in price comparison
+async function analyzeAdTextAndReturnWithOriginal (adTitle, adDescription) {
+  const analysis = await analyzeAdText (adTitle, adDescription);
+  return {...analysis, originalDescriptionForContext: adDescription};
+}
+
+async function getAdPriceComparisonInsight (
+  aiValueRange,
+  askingPrice,
+  make,
+  model,
+  visualCondition,
+  sellerTextSummary
+) {
+  // Ensure sellerTextSummary and its properties are safely accessed
+  const safeSellerTextSummary = sellerTextSummary || {};
+  const mentionedFeatures = Array.isArray (
+    safeSellerTextSummary.mentionedFeatures
+  )
+    ? safeSellerTextSummary.mentionedFeatures
+    : [];
+  const mentionedProblems = Array.isArray (
+    safeSellerTextSummary.mentionedProblems
+  )
+    ? safeSellerTextSummary.mentionedProblems
+    : [];
+  const sellerCondition =
+    safeSellerTextSummary.sellerConditionSummary || 'Not specified by seller.';
+  const originalDescription =
+    safeSellerTextSummary.originalDescriptionForContext || ''; // Get original description
+
+  const prompt = `You are an AI assistant helping a user evaluate a vintage audio equipment ad.
+Item: ${make} ${model}
+AI Estimated Value Range (based on visual condition from image): ${aiValueRange}
+Seller's Asking Price: $${askingPrice}
+AI Visual Condition Assessment (from image): "${visualCondition}"
+Seller's Stated Condition Summary (from ad text): "${sellerCondition}"
+Seller's Mentioned Features (from ad text): ${mentionedFeatures.length > 0 ? mentionedFeatures.join (', ') : 'None mentioned.'}
+Seller's Mentioned Problems (from ad text): ${mentionedProblems.length > 0 ? mentionedProblems.join (', ') : 'None mentioned.'}
+Full Ad Description (for context on pricing flexibility): "${originalDescription}"
+
+Task: Provide a brief insight comparing the seller's asking price to the AI's estimated value range.
+Consider the AI's visual assessment, the seller's textual description of condition, mentioned features, and mentioned problems.
+**Crucially, examine the seller's text (especially the "Full Ad Description" provided above) for any indication that the asking price is flexible (e.g., "OBO", "Or Best Offer", "accepting offers", "negotiable", "make an offer") or if the price seems unusually high or low relative to the stated condition and features.**
+Explain if the asking price seems high, low, or reasonable *in light of the seller's description and any noted price flexibility*.
+Keep the insight concise, 2-4 sentences.
+Return your response in the specified JSON format.`;
+
+  const schema = {
+    type: 'OBJECT',
+    properties: {
+      insight: {
+        type: 'STRING',
+        description: "A concise insight comparing the asking price to the AI's estimated value, considering condition details and any price flexibility mentioned by the seller.",
+      },
+    },
+    required: ['insight'],
+  };
+
+  try {
+    const result = await proModel.generateContent ({
+      contents: [{role: 'user', parts: [{text: prompt}]}],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: schema,
+        temperature: 0.5,
+      },
+    });
+    return JSON.parse (result.response.text ());
+  } catch (error) {
+    console.error ('Error in getAdPriceComparisonInsight:', error);
+    // Return a default structure on error
+    return {
+      insight: 'Could not generate price comparison insight due to an error.',
+      error: `Gemini AI price comparison insight failed: ${error.message}`,
+    };
   }
 }
 
@@ -462,8 +599,6 @@ const deleteFromGcs = async (fileUrl, bucketName, storage) => {
     }
   } catch (error) {
     console.error (`Failed to delete file from GCS: ${fileUrl}`, error);
-    // Optionally re-throw or handle more gracefully depending on requirements
-    // For now, just logging, as per original code.
   }
 };
 
@@ -471,6 +606,8 @@ module.exports = {
   getVisualAnalysis,
   getFactualFeatures,
   getSynthesizedValuation,
+  analyzeAdText: analyzeAdTextAndReturnWithOriginal, // Use the wrapper
+  getAdPriceComparisonInsight,
   getAiValueInsight,
   getRelatedGearSuggestions,
   uploadToGcs,

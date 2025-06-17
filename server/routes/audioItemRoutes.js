@@ -10,6 +10,8 @@ const {
   getVisualAnalysis,
   getFactualFeatures,
   getSynthesizedValuation,
+  analyzeAdText,
+  getAdPriceComparisonInsight,
   getAiValueInsight,
   getRelatedGearSuggestions,
   uploadToGcs,
@@ -21,7 +23,7 @@ const router = express.Router ();
 // Multer configurations
 const upload = multer ({
   storage: multer.memoryStorage (),
-  limits: {fileSize: 5 * 1024 * 1024}, // 5MB
+  limits: {fileSize: 5 * 1024 * 1024},
   fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith ('image/')) {
       cb (null, true);
@@ -32,7 +34,7 @@ const upload = multer ({
 });
 const uploadMultiple = multer ({
   storage: multer.memoryStorage (),
-  limits: {fileSize: 5 * 1024 * 1024}, // 5MB per file
+  limits: {fileSize: 5 * 1024 * 1024},
   fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith ('image/')) {
       cb (null, true);
@@ -43,7 +45,7 @@ const uploadMultiple = multer ({
 });
 const uploadForAnalysis = multer ({
   storage: multer.memoryStorage (),
-  limits: {fileSize: 10 * 1024 * 1024}, // 10MB for analysis images
+  limits: {fileSize: 10 * 1024 * 1024},
   fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith ('image/')) {
       cb (null, true);
@@ -91,7 +93,7 @@ const uploadMultipleToGcs = async (req, res, next) => {
       uploadToGcs (file, gcs.bucketName, gcs.storage)
     );
     const gcsUrls = await Promise.all (uploadPromises);
-    req.gcsUrls = gcsUrls; // Attach all GCS URLs to the request
+    req.gcsUrls = gcsUrls;
     next ();
   } catch (error) {
     console.error ('Error in uploadMultipleToGcs middleware:', error);
@@ -107,87 +109,7 @@ const uploadMultipleToGcs = async (req, res, next) => {
   protect,
   uploadForAnalysis.single ('image'),
   async (req, res) => {
-    console.log ('--- REFACTORED /api/items/analyze-wild-find route hit! ---');
-    if (!req.file) {
-      return res
-        .status (400)
-        .json ({message: 'No image file uploaded.', status: 'error'});
-    }
-
-    try {
-      // Step 1: Get Visual Analysis for ALL items in the image
-      console.log ('Step 1: Performing visual analysis for all items...');
-      const visualDataArray = await getVisualAnalysis (req.file);
-      console.log (
-        'Visual analysis complete, items found:',
-        visualDataArray.length
-      );
-      // For debugging:
-      // console.log('Raw visualDataArray:', JSON.stringify(visualDataArray, null, 2));
-
-
-      if (!visualDataArray || visualDataArray.length === 0) {
-        return res.status (400).json ({
-          message: 'Could not identify any items from the image. Please try a clearer, more direct photo.',
-          status: 'error',
-        });
-      }
-
-      const allAnalyses = [];
-      const unidentifiedMakes = ['unidentified', 'unknown', 'unidentified make'];
-      const unidentifiedModels = ['unidentified', 'unknown', 'model not clearly identifiable'];
-
-      // Loop through each identified item and perform the full analysis
-      for (const item of visualDataArray) {
-        const makeLower = item.make ? item.make.toLowerCase() : '';
-        const modelLower = item.model ? item.model.toLowerCase() : '';
-
-        const makeIsInvalid = !item.make || unidentifiedMakes.includes(makeLower);
-        const modelIsInvalid = !item.model || unidentifiedModels.includes(modelLower);
-
-        if (makeIsInvalid || modelIsInvalid) {
-          console.log(
-            `Skipping item due to invalid/generic make or model: Make='${item.make}', Model='${item.model}'`
-          );
-          continue; // Skip to the next item
-        }
-
-        console.log (`Analyzing item: ${item.make} ${item.model}`);
-        const factualData = await getFactualFeatures (item.make, item.model);
-        const valuationData = await getSynthesizedValuation (item, factualData);
-
-        const fullItemAnalysis = {...item, ...factualData, ...valuationData};
-        allAnalyses.push (fullItemAnalysis);
-      }
-
-      if (allAnalyses.length === 0) {
-        // This means items might have been detected by visual analysis, but none were identifiable enough for full analysis
-        if (visualDataArray.length > 0) {
-             return res.status(400).json({
-                message: `The AI detected ${visualDataArray.length} item(s) but could not specifically identify their make and model for a full analysis. Try a clearer image or different angle.`,
-                status: 'error', // Or a more specific status like 'partial_identification_failed'
-             });
-        }
-        // This means visual analysis itself found nothing
-        return res.status (400).json ({
-          message: 'Could not identify any items from the image, or those found were too obscure for full analysis.',
-          status: 'error',
-        });
-      }
-
-      res.status (200).json ({
-        message: `Successfully analyzed ${allAnalyses.length} item(s).`,
-        status: 'success',
-        analyses: allAnalyses,
-      });
-    } catch (error) {
-      console.error ('Error during multi-step Wild Find analysis:', error);
-      res.status (500).json ({
-        message: 'An error occurred during the AI analysis process.',
-        status: 'error',
-        errorDetails: error.message,
-      });
-    }
+    // ... old code ...
   }
 ); */
 
@@ -195,27 +117,25 @@ const uploadMultipleToGcs = async (req, res, next) => {
 router.post (
   '/',
   protect,
-  upload.single ('photo'), // Expect a single file named 'photo'
+  upload.single ('photo'),
   uploadSingleToGcs,
   async (req, res) => {
     try {
       const {
-        make, // Changed from 'name' to 'make' for consistency
+        make,
         model,
-        itemType, // Changed from 'type' to 'itemType'
+        itemType,
         condition,
         isFullyFunctional,
-        issuesDescription, // New field
-        specifications, // New field
-        notes, // New field
+        issuesDescription,
+        specifications,
+        notes,
         purchaseDate,
         purchasePrice,
-        userEstimatedValue, // New field
-        userEstimatedValueDate, // New field
-        // Removed: serialNumber, brand, description, isForSale, salePrice
+        userEstimatedValue,
+        userEstimatedValueDate,
       } = req.body;
 
-      // Basic validation for required fields
       if (!make || !model || !itemType || !condition) {
         return res
           .status (400)
@@ -231,17 +151,16 @@ router.post (
         itemType,
         condition,
         isFullyFunctional: String (isFullyFunctional).toLowerCase () === 'true',
-        issuesDescription: issuesDescription || '', // Default to empty string if not provided
+        issuesDescription: issuesDescription || '',
         specifications: specifications || '',
         notes: notes || '',
-        purchaseDate: purchaseDate || null, // Allow null if not provided
+        purchaseDate: purchaseDate || null,
         purchasePrice: purchasePrice ? Number (purchasePrice) : null,
         userEstimatedValue: userEstimatedValue
           ? Number (userEstimatedValue)
           : null,
         userEstimatedValueDate: userEstimatedValueDate || null,
         photoUrls: req.file && req.file.gcsUrl ? [req.file.gcsUrl] : [],
-        // Ensure other fields from the model are handled or have defaults
       };
       const audioItem = new AudioItem (newItemData);
       await audioItem.save ();
@@ -260,7 +179,7 @@ router.post (
 router.get ('/', protect, async (req, res) => {
   try {
     const items = await AudioItem.find ({user: req.user.id}).sort ({
-      createdAt: -1, // Sort by newest first
+      createdAt: -1,
     });
     res.json (items);
   } catch (error) {
@@ -294,7 +213,7 @@ router.get ('/:id', protect, async (req, res) => {
 router.put (
   '/:id',
   protect,
-  uploadMultiple.array ('photos', 5), // Changed from 'newPhotos' to 'photos'
+  uploadMultiple.array ('photos', 5),
   uploadMultipleToGcs,
   async (req, res) => {
     try {
@@ -308,18 +227,15 @@ router.put (
 
       const updateFields = {...req.body};
 
-      // Handle boolean conversions explicitly
       if (updateFields.hasOwnProperty ('isFullyFunctional')) {
         updateFields.isFullyFunctional =
           String (updateFields.isFullyFunctional).toLowerCase () === 'true';
       }
       if (updateFields.hasOwnProperty ('isForSale')) {
-        // Added for direct sale status update
         updateFields.isForSale =
           String (updateFields.isForSale).toLowerCase () === 'true';
       }
 
-      // Handle numeric conversions
       if (updateFields.purchasePrice) {
         updateFields.purchasePrice = Number (updateFields.purchasePrice);
       }
@@ -329,36 +245,30 @@ router.put (
         );
       }
       if (updateFields.askingPrice) {
-        // Added for direct sale status update
         updateFields.askingPrice = Number (updateFields.askingPrice);
       }
 
-      // Handle photo updates
       let finalPhotoUrls = item.photoUrls || [];
 
-      // If existingPhotoUrls is sent, it means the client is managing the full list.
-      // It should be a JSON stringified array.
       if (updateFields.hasOwnProperty ('existingPhotoUrls')) {
         try {
           finalPhotoUrls = JSON.parse (updateFields.existingPhotoUrls);
           if (!Array.isArray (finalPhotoUrls)) {
-            finalPhotoUrls = []; // Default to empty if parsing fails or not an array
+            finalPhotoUrls = [];
           }
         } catch (e) {
           console.error ('Error parsing existingPhotoUrls:', e);
-          finalPhotoUrls = item.photoUrls || []; // Revert to original if parsing fails
+          finalPhotoUrls = item.photoUrls || [];
         }
-        delete updateFields.existingPhotoUrls; // Don't save this helper field to DB
+        delete updateFields.existingPhotoUrls;
       }
 
-      // Add newly uploaded photos (if any from 'photos' field)
       if (req.gcsUrls && req.gcsUrls.length > 0) {
         finalPhotoUrls.push (...req.gcsUrls);
       }
 
       updateFields.photoUrls = finalPhotoUrls;
 
-      // Ensure optional fields that might be empty are handled (e.g., set to empty string or null)
       const optionalFields = [
         'issuesDescription',
         'specifications',
@@ -374,8 +284,6 @@ router.put (
             updateFields[field] === null ||
             updateFields[field] === undefined
           ) {
-            // For text fields, allow empty string. For dates/numbers, null might be better if schema allows.
-            // Assuming schema allows null for dates and empty string for text.
             if (
               field.includes ('Date') ||
               field.includes ('Price') ||
@@ -383,7 +291,7 @@ router.put (
             ) {
               updateFields[field] = null;
             } else {
-              updateFields[field] = updateFields[field] || ''; // Keep empty string for text
+              updateFields[field] = updateFields[field] || '';
             }
           }
         }
@@ -422,20 +330,17 @@ router.delete ('/:id', protect, async (req, res) => {
       return res.status (401).json ({message: 'User not authorized'});
     }
 
-    // Delete images from GCS
     const gcs = req.app.locals.gcs;
     if (item.photoUrls && item.photoUrls.length > 0 && gcs && gcs.bucketName) {
       const deletePromises = item.photoUrls.map (url =>
         deleteFromGcs (url, gcs.bucketName, gcs.storage).catch (err => {
-          // Log individual deletion errors but don't stop the process
           console.error (`Failed to delete GCS image ${url}:`, err);
         })
       );
-      // Wait for all deletions, but don't let one failure stop item deletion from DB
       await Promise.all (deletePromises);
     }
 
-    await AudioItem.findByIdAndDelete (req.params.id); // Corrected method name
+    await AudioItem.findByIdAndDelete (req.params.id);
     res.json ({message: 'Item removed successfully'});
   } catch (error) {
     console.error ('Error deleting item:', error);
@@ -448,7 +353,6 @@ router.delete ('/:id', protect, async (req, res) => {
   }
 });
 
-// This route is now for getting AI evaluation AND suggestions and saving them
 router.patch ('/:id/ai-evaluation', protect, async (req, res) => {
   console.log (`--- HIT PATCH /api/items/${req.params.id}/ai-evaluation ---`);
   try {
@@ -481,18 +385,16 @@ router.patch ('/:id/ai-evaluation', protect, async (req, res) => {
       item.photoUrls
     );
 
-    // Save the AI data to the item
     item.aiValueInsight = valueInsight;
     item.aiSuggestions = suggestions;
-    item.lastAiEvaluationDate = new Date (); // Record when this was done
+    item.lastAiEvaluationDate = new Date ();
 
     const updatedItem = await item.save ();
     console.log ('AI evaluation and suggestions saved and item updated.');
-    res.json (updatedItem); // Return the fully updated item
+    res.json (updatedItem);
   } catch (error) {
     console.error ('Error in AI evaluation and suggestion process:', error);
     if (error.message && error.message.includes ('429')) {
-      // Basic check for rate limit error text
       return res
         .status (429)
         .json ({
@@ -509,9 +411,9 @@ router.patch ('/:id/ai-evaluation', protect, async (req, res) => {
   }
 });
 
-// --- NEW WILD FIND ROUTES ---
+// --- WILD FIND ROUTES (TWO-STEP PROCESS) ---
 
-// Step 1: Initial Scan of the uploaded image
+// Step 1: Initial Scan of the uploaded image for Wild Find
 router.post (
   '/wild-find-initial-scan',
   protect,
@@ -526,26 +428,23 @@ router.post (
 
     try {
       console.log ('Performing initial visual analysis for Wild Find...');
-      const visualDataArray = await getVisualAnalysis (req.file); // from geminiService
+      const visualDataArray = await getVisualAnalysis (req.file);
 
       if (!visualDataArray || visualDataArray.length === 0) {
         return res.status (404).json ({
-          // Changed to 404 as "not found" is more appropriate than bad request
           message: 'The AI could not identify any distinct items in the image. Please try a clearer photo or a different angle.',
-          status: 'error', // Keep status for frontend to check
-          scannedItems: [], // Ensure frontend always gets an array
+          status: 'error',
+          scannedItems: [],
         });
       }
 
       console.log (
         `Initial scan found ${visualDataArray.length} potential item(s).`
       );
-      // We send back whatever the AI found, even if make/model are generic like "Unidentified Make"
-      // The frontend will allow the user to edit these.
       res.status (200).json ({
         message: `Successfully scanned image. Found ${visualDataArray.length} potential item(s).`,
         status: 'success',
-        scannedItems: visualDataArray, // Array of {make, model, conditionDescription}
+        scannedItems: visualDataArray,
       });
     } catch (error) {
       console.error ('Error during Wild Find initial scan:', error);
@@ -558,10 +457,10 @@ router.post (
   }
 );
 
-// Step 2: Detailed Analysis of user-confirmed/edited items
+// Step 2: Detailed Analysis of user-confirmed/edited items for Wild Find
 router.post ('/wild-find-detailed-analysis', protect, async (req, res) => {
   console.log ('--- HIT /api/items/wild-find-detailed-analysis ---');
-  const {items} = req.body; // Expects an array of items: [{clientId?, make, model, conditionDescription}, ...]
+  const {items} = req.body;
 
   if (!items || !Array.isArray (items) || items.length === 0) {
     return res
@@ -574,13 +473,10 @@ router.post ('/wild-find-detailed-analysis', protect, async (req, res) => {
 
   try {
     const allAnalyses = [];
-    // Define what makes an item "unidentified" based on your geminiService prompts
-    const unidentifiedMakes = ['unidentified make', 'unknown']; // Case-insensitive checks later
-    const unidentifiedModels = ['model not clearly identifiable', 'unknown']; // Case-insensitive checks later
+    const unidentifiedMakes = ['unidentified make', 'unknown'];
+    const unidentifiedModels = ['model not clearly identifiable', 'unknown'];
 
     for (const item of items) {
-      // Validate each item from the user
-      // conditionDescription comes from the initial AI scan and is not editable by user, so it should be present.
       if (!item.make || !item.model || !item.conditionDescription) {
         console.log (
           'Skipping item with missing make, model, or original conditionDescription:',
@@ -592,7 +488,6 @@ router.post ('/wild-find-detailed-analysis', protect, async (req, res) => {
       const makeLower = item.make.toLowerCase ();
       const modelLower = item.model.toLowerCase ();
 
-      // Skip if make or model is still a placeholder (user didn't correct it sufficiently)
       if (
         unidentifiedMakes.includes (makeLower) ||
         unidentifiedModels.includes (modelLower)
@@ -607,15 +502,12 @@ router.post ('/wild-find-detailed-analysis', protect, async (req, res) => {
         `Performing detailed analysis for: ${item.make} ${item.model}`
       );
       const factualData = await getFactualFeatures (item.make, item.model);
-      // Pass the item itself as visualData, as it contains make, model, and the AI's original conditionDescription
       const valuationData = await getSynthesizedValuation (item, factualData);
 
-      // Combine original item data (especially conditionDescription from initial scan, and user-edited make/model)
-      // with new AI data for features and valuation.
       allAnalyses.push ({
         make: item.make,
         model: item.model,
-        conditionDescription: item.conditionDescription, // This is crucial, from the initial scan
+        conditionDescription: item.conditionDescription,
         ...factualData,
         ...valuationData,
       });
@@ -642,5 +534,166 @@ router.post ('/wild-find-detailed-analysis', protect, async (req, res) => {
     });
   }
 });
+
+// --- NEW AD ANALYZER ROUTE ---
+router.post (
+  '/analyze-ad-listing',
+  protect,
+  uploadForAnalysis.single ('adImage'),
+  async (req, res) => {
+    console.log ('--- HIT /api/items/analyze-ad-listing ---');
+    const {adTitle, adDescription, adAskingPrice, adUrl} = req.body;
+    const adImageFile = req.file;
+
+    if (!adImageFile || !adTitle || !adDescription || !adAskingPrice) {
+      return res.status (400).json ({
+        message: 'Missing required fields: adImage, adTitle, adDescription, or adAskingPrice.',
+        status: 'error',
+      });
+    }
+
+    try {
+      let identifiedMake = 'Unknown';
+      let identifiedModel = 'Unknown';
+      let visualConditionDescription = 'Could not be determined from image.';
+      let factualData = {keyFeatures: [], specifications: [], message: ''}; // Ensure message property exists
+      let valuation = {
+        valueRange: 'N/A',
+        reasoning: 'Valuation could not be performed.',
+        disclaimer: '',
+      };
+      let priceComparison = {
+        insight: 'Price comparison could not be performed.',
+      };
+
+      // 1. Analyze Image (Visual Analysis)
+      console.log ('Step 1: Performing visual analysis on ad image...');
+      const visualAnalysisResults = await getVisualAnalysis (adImageFile);
+      if (visualAnalysisResults && visualAnalysisResults.length > 0) {
+        const primaryVisualItem = visualAnalysisResults[0];
+        identifiedMake = primaryVisualItem.make || identifiedMake;
+        identifiedModel = primaryVisualItem.model || identifiedModel;
+        visualConditionDescription =
+          primaryVisualItem.conditionDescription || visualConditionDescription;
+        console.log (
+          `Visual Analysis: Make=${identifiedMake}, Model=${identifiedModel}`
+        );
+      } else {
+        console.log (
+          'Visual analysis did not identify any specific items from the image.'
+        );
+      }
+
+      // 2. Analyze Ad Text (this now returns the object with originalDescriptionForContext)
+      console.log ('Step 2: Analyzing ad text...');
+      const sellerTextSummary = await analyzeAdText (adTitle, adDescription); // analyzeAdText is now the wrapper
+      console.log ('Seller Text Summary:', sellerTextSummary);
+
+      if (
+        sellerTextSummary.extractedMake &&
+        sellerTextSummary.extractedMake.toLowerCase () !== 'unspecified make' &&
+        sellerTextSummary.extractedMake.toLowerCase () !==
+          'error processing text'
+      ) {
+        identifiedMake = sellerTextSummary.extractedMake;
+      }
+      if (
+        sellerTextSummary.extractedModel &&
+        sellerTextSummary.extractedModel.toLowerCase () !==
+          'unspecified model' &&
+        sellerTextSummary.extractedModel.toLowerCase () !==
+          'error processing text'
+      ) {
+        identifiedModel = sellerTextSummary.extractedModel;
+      }
+      console.log (
+        `Consolidated Identification: Make=${identifiedMake}, Model=${identifiedModel}`
+      );
+
+      const makeIsInvalid =
+        !identifiedMake ||
+        [
+          'unidentified make',
+          'unknown',
+          'unspecified make',
+          'error processing text',
+        ].includes (identifiedMake.toLowerCase ());
+      const modelIsInvalid =
+        !identifiedModel ||
+        [
+          'model not clearly identifiable',
+          'unknown',
+          'unspecified model',
+          'error processing text',
+        ].includes (identifiedModel.toLowerCase ());
+
+      if (!makeIsInvalid && !modelIsInvalid) {
+        console.log (
+          `Step 3: Getting factual features for ${identifiedMake} ${identifiedModel}...`
+        );
+        factualData = await getFactualFeatures (
+          identifiedMake,
+          identifiedModel
+        );
+      } else {
+        console.log (
+          `Skipping factual features due to generic/error in make/model: Make='${identifiedMake}', Model='${identifiedModel}'`
+        );
+        factualData.message =
+          'Factual features could not be retrieved due to non-specific or error in make/model identification.';
+      }
+
+      const visualDataForValuation = {
+        make: identifiedMake,
+        model: identifiedModel,
+        conditionDescription: visualConditionDescription,
+      };
+      console.log (
+        `Step 4: Getting synthesized valuation for ${identifiedMake} ${identifiedModel}...`
+      );
+      valuation = await getSynthesizedValuation (
+        visualDataForValuation,
+        factualData
+      );
+
+      console.log ('Step 5: Getting price comparison insight...');
+      // Pass the full sellerTextSummary object which includes originalDescriptionForContext
+      priceComparison = await getAdPriceComparisonInsight (
+        valuation.valueRange,
+        adAskingPrice,
+        identifiedMake,
+        identifiedModel,
+        visualConditionDescription,
+        sellerTextSummary // Pass the whole object
+      );
+
+      res.status (200).json ({
+        message: 'Ad analysis complete.',
+        status: 'success',
+        analysis: {
+          identifiedMake,
+          identifiedModel,
+          visualConditionDescription,
+          sellerTextSummary,
+          factualFeatures: factualData,
+          valuation,
+          priceComparison,
+          originalAdInfo: {
+            adUrl,
+            adTitle,
+            adAskingPrice,
+          },
+        },
+      });
+    } catch (error) {
+      console.error ('Error during ad analysis:', error);
+      res.status (500).json ({
+        message: 'An error occurred during the ad analysis process.',
+        status: 'error',
+        errorDetails: error.message,
+      });
+    }
+  }
+);
 
 module.exports = router;
