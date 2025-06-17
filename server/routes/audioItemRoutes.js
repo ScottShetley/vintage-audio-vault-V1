@@ -7,11 +7,13 @@ const {Readable} = require ('stream');
 const {protect} = require ('../middleware/authMiddleware');
 const AudioItem = require ('../models/AudioItem');
 const {
+  getVisualAnalysis,
+  getFactualFeatures,
+  getSynthesizedValuation,
+  getAiValueInsight,
+  getRelatedGearSuggestions,
   uploadToGcs,
   deleteFromGcs,
-  getGeminiValuation,
-  getGeminiGearSuggestions,
-  getGeminiImageDescription, // Make sure this is correctly imported
 } = require ('../utils/geminiService');
 
 const router = express.Router ();
@@ -28,10 +30,9 @@ const upload = multer ({
     }
   },
 });
-
 const uploadMultiple = multer ({
   storage: multer.memoryStorage (),
-  limits: {fileSize: 5 * 1024 * 1024}, // 5MB
+  limits: {fileSize: 5 * 1024 * 1024}, // 5MB per file
   fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith ('image/')) {
       cb (null, true);
@@ -40,11 +41,9 @@ const uploadMultiple = multer ({
     }
   },
 });
-
-// This Multer instance is intended for the analyze-wild-find route
 const uploadForAnalysis = multer ({
   storage: multer.memoryStorage (),
-  limits: {fileSize: 10 * 1024 * 1024}, // 10MB
+  limits: {fileSize: 10 * 1024 * 1024}, // 10MB for analysis images
   fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith ('image/')) {
       cb (null, true);
@@ -76,7 +75,6 @@ const uploadSingleToGcs = (req, res, next) => {
       next (error);
     });
 };
-
 const uploadMultipleToGcs = async (req, res, next) => {
   if (!req.files || req.files.length === 0) {
     return next ();
@@ -93,7 +91,7 @@ const uploadMultipleToGcs = async (req, res, next) => {
       uploadToGcs (file, gcs.bucketName, gcs.storage)
     );
     const gcsUrls = await Promise.all (uploadPromises);
-    req.gcsUrls = gcsUrls;
+    req.gcsUrls = gcsUrls; // Attach all GCS URLs to the request
     next ();
   } catch (error) {
     console.error ('Error in uploadMultipleToGcs middleware:', error);
@@ -103,114 +101,147 @@ const uploadMultipleToGcs = async (req, res, next) => {
 
 // --- ROUTE DEFINITIONS ---
 
-// POST /api/items/analyze-wild-find - Integrate Gemini AI Image Description
-router.post (
+// POST /api/items/analyze-wild-find - OLD ROUTE - Superseded by initial-scan and detailed-analysis
+/* router.post (
   '/analyze-wild-find',
   protect,
   uploadForAnalysis.single ('image'),
   async (req, res) => {
-    console.log (
-      '--- GEMINI ANALYSIS /api/items/analyze-wild-find route hit! ---'
-    );
-    console.log ('User from token:', req.user);
-
-    const gemini = req.app.locals.gemini;
-    if (!gemini) {
-      console.error ('Gemini AI service not available in /analyze-wild-find');
-      return res.status (500).json ({
-        message: 'Error: Gemini AI service not available.',
-        status: 'error',
-      });
-    }
-
+    console.log ('--- REFACTORED /api/items/analyze-wild-find route hit! ---');
     if (!req.file) {
-      console.log ('No file received for Gemini analysis.');
-      return res.status (400).json ({
-        message: 'No image file uploaded for analysis.',
-        status: 'error',
-        userIdFromToken: req.user.id, // req.user is guaranteed by 'protect' middleware
-      });
+      return res
+        .status (400)
+        .json ({message: 'No image file uploaded.', status: 'error'});
     }
-
-    console.log ('File received for Gemini analysis:', {
-      originalname: req.file.originalname,
-      mimetype: req.file.mimetype,
-      size: req.file.size,
-    });
 
     try {
-      // Assuming getGeminiImageDescription takes the gemini client and the file object (with buffer)
-      const description = await getGeminiImageDescription (gemini, req.file);
+      // Step 1: Get Visual Analysis for ALL items in the image
+      console.log ('Step 1: Performing visual analysis for all items...');
+      const visualDataArray = await getVisualAnalysis (req.file);
+      console.log (
+        'Visual analysis complete, items found:',
+        visualDataArray.length
+      );
+      // For debugging:
+      // console.log('Raw visualDataArray:', JSON.stringify(visualDataArray, null, 2));
 
-      console.log ('Gemini AI Description:', description);
+
+      if (!visualDataArray || visualDataArray.length === 0) {
+        return res.status (400).json ({
+          message: 'Could not identify any items from the image. Please try a clearer, more direct photo.',
+          status: 'error',
+        });
+      }
+
+      const allAnalyses = [];
+      const unidentifiedMakes = ['unidentified', 'unknown', 'unidentified make'];
+      const unidentifiedModels = ['unidentified', 'unknown', 'model not clearly identifiable'];
+
+      // Loop through each identified item and perform the full analysis
+      for (const item of visualDataArray) {
+        const makeLower = item.make ? item.make.toLowerCase() : '';
+        const modelLower = item.model ? item.model.toLowerCase() : '';
+
+        const makeIsInvalid = !item.make || unidentifiedMakes.includes(makeLower);
+        const modelIsInvalid = !item.model || unidentifiedModels.includes(modelLower);
+
+        if (makeIsInvalid || modelIsInvalid) {
+          console.log(
+            `Skipping item due to invalid/generic make or model: Make='${item.make}', Model='${item.model}'`
+          );
+          continue; // Skip to the next item
+        }
+
+        console.log (`Analyzing item: ${item.make} ${item.model}`);
+        const factualData = await getFactualFeatures (item.make, item.model);
+        const valuationData = await getSynthesizedValuation (item, factualData);
+
+        const fullItemAnalysis = {...item, ...factualData, ...valuationData};
+        allAnalyses.push (fullItemAnalysis);
+      }
+
+      if (allAnalyses.length === 0) {
+        // This means items might have been detected by visual analysis, but none were identifiable enough for full analysis
+        if (visualDataArray.length > 0) {
+             return res.status(400).json({
+                message: `The AI detected ${visualDataArray.length} item(s) but could not specifically identify their make and model for a full analysis. Try a clearer image or different angle.`,
+                status: 'error', // Or a more specific status like 'partial_identification_failed'
+             });
+        }
+        // This means visual analysis itself found nothing
+        return res.status (400).json ({
+          message: 'Could not identify any items from the image, or those found were too obscure for full analysis.',
+          status: 'error',
+        });
+      }
 
       res.status (200).json ({
-        message: 'Wild Find analysis successful.',
+        message: `Successfully analyzed ${allAnalyses.length} item(s).`,
         status: 'success',
-        userIdFromToken: req.user.id, // req.user.id is guaranteed by 'protect'
-        fileDetails: {
-          name: req.file.originalname,
-          type: req.file.mimetype,
-          size: req.file.size,
-        },
-        analysisResult: {
-          description: description,
-          // You can add more fields here as your AI service provides them
-        },
+        analyses: allAnalyses,
       });
     } catch (error) {
-      console.error ('Error during Gemini AI image description:', error);
+      console.error ('Error during multi-step Wild Find analysis:', error);
       res.status (500).json ({
-        message: 'Error performing AI analysis on the image.',
+        message: 'An error occurred during the AI analysis process.',
         status: 'error',
-        errorDetails: error.message, // Provide the specific error message
-        userIdFromToken: req.user.id, // req.user is guaranteed by 'protect' middleware
+        errorDetails: error.message,
       });
     }
   }
-);
+); */
 
 // --- CRUD Operations for Audio Items ---
-
-// POST /api/items - Create a new audio item
 router.post (
   '/',
   protect,
-  upload.single ('photo'),
+  upload.single ('photo'), // Expect a single file named 'photo'
   uploadSingleToGcs,
   async (req, res) => {
     try {
       const {
-        name,
-        type,
-        brand,
+        make, // Changed from 'name' to 'make' for consistency
         model,
-        serialNumber,
-        purchaseDate,
-        purchasePrice,
-        description,
+        itemType, // Changed from 'type' to 'itemType'
         condition,
         isFullyFunctional,
-        isForSale,
-        salePrice,
-        notes,
+        issuesDescription, // New field
+        specifications, // New field
+        notes, // New field
+        purchaseDate,
+        purchasePrice,
+        userEstimatedValue, // New field
+        userEstimatedValueDate, // New field
+        // Removed: serialNumber, brand, description, isForSale, salePrice
       } = req.body;
+
+      // Basic validation for required fields
+      if (!make || !model || !itemType || !condition) {
+        return res
+          .status (400)
+          .json ({
+            message: 'Make, Model, Item Type, and Condition are required.',
+          });
+      }
+
       const newItemData = {
         user: req.user.id,
-        name,
-        type,
-        brand,
+        make,
         model,
-        serialNumber,
-        purchaseDate,
-        purchasePrice: purchasePrice ? Number (purchasePrice) : undefined,
-        description,
+        itemType,
         condition,
         isFullyFunctional: String (isFullyFunctional).toLowerCase () === 'true',
-        isForSale: String (isForSale).toLowerCase () === 'true',
-        salePrice: salePrice ? Number (salePrice) : undefined,
-        notes,
+        issuesDescription: issuesDescription || '', // Default to empty string if not provided
+        specifications: specifications || '',
+        notes: notes || '',
+        purchaseDate: purchaseDate || null, // Allow null if not provided
+        purchasePrice: purchasePrice ? Number (purchasePrice) : null,
+        userEstimatedValue: userEstimatedValue
+          ? Number (userEstimatedValue)
+          : null,
+        userEstimatedValueDate: userEstimatedValueDate || null,
         photoUrls: req.file && req.file.gcsUrl ? [req.file.gcsUrl] : [],
+        // Ensure other fields from the model are handled or have defaults
       };
       const audioItem = new AudioItem (newItemData);
       await audioItem.save ();
@@ -226,12 +257,10 @@ router.post (
     }
   }
 );
-
-// GET /api/items - Get all audio items for the logged-in user
 router.get ('/', protect, async (req, res) => {
   try {
     const items = await AudioItem.find ({user: req.user.id}).sort ({
-      createdAt: -1,
+      createdAt: -1, // Sort by newest first
     });
     res.json (items);
   } catch (error) {
@@ -239,8 +268,6 @@ router.get ('/', protect, async (req, res) => {
     res.status (500).json ({message: 'Server error while fetching items.'});
   }
 });
-
-// GET /api/items/:id - Get a single audio item by ID
 router.get ('/:id', protect, async (req, res) => {
   try {
     const item = await AudioItem.findById (req.params.id);
@@ -264,11 +291,10 @@ router.get ('/:id', protect, async (req, res) => {
   }
 });
 
-// PUT /api/items/:id - Update an audio item by ID
 router.put (
   '/:id',
   protect,
-  uploadMultiple.array ('newPhotos', 5), // Allows uploading up to 5 new photos
+  uploadMultiple.array ('photos', 5), // Changed from 'newPhotos' to 'photos'
   uploadMultipleToGcs,
   async (req, res) => {
     try {
@@ -282,57 +308,86 @@ router.put (
 
       const updateFields = {...req.body};
 
-      // Handle photo updates:
-      // - req.gcsUrls contains URLs of newly uploaded photos.
-      // - req.body.existingPhotoUrls (if sent by client) contains URLs client wants to keep.
-      const newPhotosUploaded = req.gcsUrls && req.gcsUrls.length > 0;
-      const clientManagesExistingPhotos = updateFields.hasOwnProperty (
-        'existingPhotoUrls'
-      );
-
-      if (newPhotosUploaded || clientManagesExistingPhotos) {
-        let basePhotoUrls = [];
-        if (clientManagesExistingPhotos) {
-          // Client is explicitly stating which existing photos to keep
-          const clientExistingUrls = updateFields.existingPhotoUrls;
-          basePhotoUrls = Array.isArray (clientExistingUrls)
-            ? clientExistingUrls
-            : clientExistingUrls // Handle single string or array
-                ? [clientExistingUrls]
-                : [];
-        } else if (newPhotosUploaded) {
-          // Client is only adding new photos, keep all existing ones
-          basePhotoUrls = item.photoUrls || [];
-        }
-
-        let finalPhotoUrls = [...basePhotoUrls];
-        if (newPhotosUploaded) {
-          finalPhotoUrls.push (...req.gcsUrls);
-        }
-        updateFields.photoUrls = finalPhotoUrls;
-      }
-
-      // Remove existingPhotoUrls from updateFields as it's not a schema field
-      if (clientManagesExistingPhotos) {
-        delete updateFields.existingPhotoUrls;
-      }
-
-      // Convert boolean strings to actual booleans
+      // Handle boolean conversions explicitly
       if (updateFields.hasOwnProperty ('isFullyFunctional')) {
         updateFields.isFullyFunctional =
           String (updateFields.isFullyFunctional).toLowerCase () === 'true';
       }
       if (updateFields.hasOwnProperty ('isForSale')) {
+        // Added for direct sale status update
         updateFields.isForSale =
           String (updateFields.isForSale).toLowerCase () === 'true';
       }
-      // Convert price strings to numbers
+
+      // Handle numeric conversions
       if (updateFields.purchasePrice) {
         updateFields.purchasePrice = Number (updateFields.purchasePrice);
       }
-      if (updateFields.salePrice) {
-        updateFields.salePrice = Number (updateFields.salePrice);
+      if (updateFields.userEstimatedValue) {
+        updateFields.userEstimatedValue = Number (
+          updateFields.userEstimatedValue
+        );
       }
+      if (updateFields.askingPrice) {
+        // Added for direct sale status update
+        updateFields.askingPrice = Number (updateFields.askingPrice);
+      }
+
+      // Handle photo updates
+      let finalPhotoUrls = item.photoUrls || [];
+
+      // If existingPhotoUrls is sent, it means the client is managing the full list.
+      // It should be a JSON stringified array.
+      if (updateFields.hasOwnProperty ('existingPhotoUrls')) {
+        try {
+          finalPhotoUrls = JSON.parse (updateFields.existingPhotoUrls);
+          if (!Array.isArray (finalPhotoUrls)) {
+            finalPhotoUrls = []; // Default to empty if parsing fails or not an array
+          }
+        } catch (e) {
+          console.error ('Error parsing existingPhotoUrls:', e);
+          finalPhotoUrls = item.photoUrls || []; // Revert to original if parsing fails
+        }
+        delete updateFields.existingPhotoUrls; // Don't save this helper field to DB
+      }
+
+      // Add newly uploaded photos (if any from 'photos' field)
+      if (req.gcsUrls && req.gcsUrls.length > 0) {
+        finalPhotoUrls.push (...req.gcsUrls);
+      }
+
+      updateFields.photoUrls = finalPhotoUrls;
+
+      // Ensure optional fields that might be empty are handled (e.g., set to empty string or null)
+      const optionalFields = [
+        'issuesDescription',
+        'specifications',
+        'notes',
+        'purchaseDate',
+        'userEstimatedValueDate',
+        'saleNotes',
+      ];
+      optionalFields.forEach (field => {
+        if (updateFields.hasOwnProperty (field)) {
+          if (
+            updateFields[field] === '' ||
+            updateFields[field] === null ||
+            updateFields[field] === undefined
+          ) {
+            // For text fields, allow empty string. For dates/numbers, null might be better if schema allows.
+            // Assuming schema allows null for dates and empty string for text.
+            if (
+              field.includes ('Date') ||
+              field.includes ('Price') ||
+              field.includes ('Value')
+            ) {
+              updateFields[field] = null;
+            } else {
+              updateFields[field] = updateFields[field] || ''; // Keep empty string for text
+            }
+          }
+        }
+      });
 
       const updatedItem = await AudioItem.findByIdAndUpdate (
         req.params.id,
@@ -357,7 +412,6 @@ router.put (
   }
 );
 
-// DELETE /api/items/:id - Delete an audio item by ID
 router.delete ('/:id', protect, async (req, res) => {
   try {
     const item = await AudioItem.findById (req.params.id);
@@ -368,22 +422,20 @@ router.delete ('/:id', protect, async (req, res) => {
       return res.status (401).json ({message: 'User not authorized'});
     }
 
-    // Delete associated images from GCS
+    // Delete images from GCS
     const gcs = req.app.locals.gcs;
     if (item.photoUrls && item.photoUrls.length > 0 && gcs && gcs.bucketName) {
       const deletePromises = item.photoUrls.map (url =>
-        deleteFromGcs (url, gcs.bucketName, gcs.storage)
+        deleteFromGcs (url, gcs.bucketName, gcs.storage).catch (err => {
+          // Log individual deletion errors but don't stop the process
+          console.error (`Failed to delete GCS image ${url}:`, err);
+        })
       );
-      await Promise.all (deletePromises).catch (err => {
-        // Log error but proceed with item deletion from DB
-        console.error (
-          'Error deleting some images from GCS, but proceeding with item deletion:',
-          err
-        );
-      });
+      // Wait for all deletions, but don't let one failure stop item deletion from DB
+      await Promise.all (deletePromises);
     }
 
-    await AudioItem.findByIdAndDelete (req.params.id);
+    await AudioItem.findByIdAndDelete (req.params.id); // Corrected method name
     res.json ({message: 'Item removed successfully'});
   } catch (error) {
     console.error ('Error deleting item:', error);
@@ -396,53 +448,198 @@ router.delete ('/:id', protect, async (req, res) => {
   }
 });
 
-// --- AI Feature Routes ---
-
-// POST /api/items/:id/ai-valuation - Get AI valuation for an item
-router.post ('/:id/ai-valuation', protect, async (req, res) => {
+// This route is now for getting AI evaluation AND suggestions and saving them
+router.patch ('/:id/ai-evaluation', protect, async (req, res) => {
+  console.log (`--- HIT PATCH /api/items/${req.params.id}/ai-evaluation ---`);
   try {
     const item = await AudioItem.findById (req.params.id);
     if (!item) return res.status (404).json ({message: 'Item not found'});
     if (item.user.toString () !== req.user.id)
       return res.status (401).json ({message: 'Not authorized'});
 
-    const gemini = req.app.locals.gemini;
-    if (!gemini)
+    if (!item.make || !item.model || !item.condition || !item.itemType) {
       return res
-        .status (500)
-        .json ({message: 'Gemini AI service not available.'});
+        .status (400)
+        .json ({
+          message: 'Item make, model, condition, and type are required for full AI evaluation.',
+        });
+    }
 
-    const valuation = await getGeminiValuation (gemini, item);
-    res.json ({valuation});
+    console.log (`Fetching AI Value Insight for ${item.make} ${item.model}`);
+    const valueInsight = await getAiValueInsight (
+      item.make,
+      item.model,
+      item.condition,
+      item.photoUrls
+    );
+
+    console.log (`Fetching AI Suggestions for ${item.make} ${item.model}`);
+    const suggestions = await getRelatedGearSuggestions (
+      item.make,
+      item.model,
+      item.itemType,
+      item.photoUrls
+    );
+
+    // Save the AI data to the item
+    item.aiValueInsight = valueInsight;
+    item.aiSuggestions = suggestions;
+    item.lastAiEvaluationDate = new Date (); // Record when this was done
+
+    const updatedItem = await item.save ();
+    console.log ('AI evaluation and suggestions saved and item updated.');
+    res.json (updatedItem); // Return the fully updated item
   } catch (error) {
-    console.error ('Error getting AI valuation:', error);
+    console.error ('Error in AI evaluation and suggestion process:', error);
+    if (error.message && error.message.includes ('429')) {
+      // Basic check for rate limit error text
+      return res
+        .status (429)
+        .json ({
+          message: 'AI service is currently busy or rate limited. Please try again in a few moments.',
+          error: error.message,
+        });
+    }
     res
       .status (500)
-      .json ({message: 'Error getting AI valuation', error: error.message});
+      .json ({
+        message: 'Error during AI evaluation and suggestion process.',
+        error: error.message,
+      });
   }
 });
 
-// POST /api/items/:id/ai-suggestions - Get AI gear suggestions for an item
-router.post ('/:id/ai-suggestions', protect, async (req, res) => {
-  try {
-    const item = await AudioItem.findById (req.params.id);
-    if (!item) return res.status (404).json ({message: 'Item not found'});
-    if (item.user.toString () !== req.user.id)
-      return res.status (401).json ({message: 'Not authorized'});
+// --- NEW WILD FIND ROUTES ---
 
-    const gemini = req.app.locals.gemini;
-    if (!gemini)
+// Step 1: Initial Scan of the uploaded image
+router.post (
+  '/wild-find-initial-scan',
+  protect,
+  uploadForAnalysis.single ('image'),
+  async (req, res) => {
+    console.log ('--- HIT /api/items/wild-find-initial-scan ---');
+    if (!req.file) {
       return res
-        .status (500)
-        .json ({message: 'Gemini AI service not available.'});
+        .status (400)
+        .json ({message: 'No image file uploaded.', status: 'error'});
+    }
 
-    const suggestions = await getGeminiGearSuggestions (gemini, item);
-    res.json ({suggestions});
+    try {
+      console.log ('Performing initial visual analysis for Wild Find...');
+      const visualDataArray = await getVisualAnalysis (req.file); // from geminiService
+
+      if (!visualDataArray || visualDataArray.length === 0) {
+        return res.status (404).json ({
+          // Changed to 404 as "not found" is more appropriate than bad request
+          message: 'The AI could not identify any distinct items in the image. Please try a clearer photo or a different angle.',
+          status: 'error', // Keep status for frontend to check
+          scannedItems: [], // Ensure frontend always gets an array
+        });
+      }
+
+      console.log (
+        `Initial scan found ${visualDataArray.length} potential item(s).`
+      );
+      // We send back whatever the AI found, even if make/model are generic like "Unidentified Make"
+      // The frontend will allow the user to edit these.
+      res.status (200).json ({
+        message: `Successfully scanned image. Found ${visualDataArray.length} potential item(s).`,
+        status: 'success',
+        scannedItems: visualDataArray, // Array of {make, model, conditionDescription}
+      });
+    } catch (error) {
+      console.error ('Error during Wild Find initial scan:', error);
+      res.status (500).json ({
+        message: 'An error occurred during the AI initial scan process.',
+        status: 'error',
+        errorDetails: error.message,
+      });
+    }
+  }
+);
+
+// Step 2: Detailed Analysis of user-confirmed/edited items
+router.post ('/wild-find-detailed-analysis', protect, async (req, res) => {
+  console.log ('--- HIT /api/items/wild-find-detailed-analysis ---');
+  const {items} = req.body; // Expects an array of items: [{clientId?, make, model, conditionDescription}, ...]
+
+  if (!items || !Array.isArray (items) || items.length === 0) {
+    return res
+      .status (400)
+      .json ({
+        message: 'No items provided for detailed analysis.',
+        status: 'error',
+      });
+  }
+
+  try {
+    const allAnalyses = [];
+    // Define what makes an item "unidentified" based on your geminiService prompts
+    const unidentifiedMakes = ['unidentified make', 'unknown']; // Case-insensitive checks later
+    const unidentifiedModels = ['model not clearly identifiable', 'unknown']; // Case-insensitive checks later
+
+    for (const item of items) {
+      // Validate each item from the user
+      // conditionDescription comes from the initial AI scan and is not editable by user, so it should be present.
+      if (!item.make || !item.model || !item.conditionDescription) {
+        console.log (
+          'Skipping item with missing make, model, or original conditionDescription:',
+          item
+        );
+        continue;
+      }
+
+      const makeLower = item.make.toLowerCase ();
+      const modelLower = item.model.toLowerCase ();
+
+      // Skip if make or model is still a placeholder (user didn't correct it sufficiently)
+      if (
+        unidentifiedMakes.includes (makeLower) ||
+        unidentifiedModels.includes (modelLower)
+      ) {
+        console.log (
+          `Skipping item due to generic make/model after user review: Make='${item.make}', Model='${item.model}'`
+        );
+        continue;
+      }
+
+      console.log (
+        `Performing detailed analysis for: ${item.make} ${item.model}`
+      );
+      const factualData = await getFactualFeatures (item.make, item.model);
+      // Pass the item itself as visualData, as it contains make, model, and the AI's original conditionDescription
+      const valuationData = await getSynthesizedValuation (item, factualData);
+
+      // Combine original item data (especially conditionDescription from initial scan, and user-edited make/model)
+      // with new AI data for features and valuation.
+      allAnalyses.push ({
+        make: item.make,
+        model: item.model,
+        conditionDescription: item.conditionDescription, // This is crucial, from the initial scan
+        ...factualData,
+        ...valuationData,
+      });
+    }
+
+    if (allAnalyses.length === 0) {
+      return res.status (400).json ({
+        message: 'Could not perform detailed analysis on any of the provided items. Please ensure make and model are specific and not generic placeholders.',
+        status: 'error',
+      });
+    }
+
+    res.status (200).json ({
+      message: `Successfully performed detailed analysis on ${allAnalyses.length} item(s).`,
+      status: 'success',
+      analyses: allAnalyses,
+    });
   } catch (error) {
-    console.error ('Error getting AI suggestions:', error);
-    res
-      .status (500)
-      .json ({message: 'Error getting AI suggestions', error: error.message});
+    console.error ('Error during Wild Find detailed analysis:', error);
+    res.status (500).json ({
+      message: 'An error occurred during the AI detailed analysis process.',
+      status: 'error',
+      errorDetails: error.message,
+    });
   }
 });
 

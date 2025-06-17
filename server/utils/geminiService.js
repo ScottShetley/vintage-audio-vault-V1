@@ -5,31 +5,225 @@ const {
   HarmCategory,
 } = require ('@google/generative-ai');
 const axios = require ('axios');
+const {Readable} = require ('stream');
 
 // Access your API key as an environment variable
 const genAI = new GoogleGenerativeAI (process.env.GEMINI_API_KEY);
 
-// --- Model for Value Insights (No changes here) ---
+// --- MODEL NAMES ---
+const MODEL_NAME_PRO = 'gemini-1.5-pro';
+const MODEL_NAME_FLASH = 'gemini-1.5-flash';
+
+// --- COMMON SAFETY SETTINGS ---
+const DEFAULT_SAFETY_SETTINGS = [
+  {
+    category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+    threshold: HarmBlockThreshold.BLOCK_NONE,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+    threshold: HarmBlockThreshold.BLOCK_NONE,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+    threshold: HarmBlockThreshold.BLOCK_NONE,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+    threshold: HarmBlockThreshold.BLOCK_NONE,
+  },
+];
+
+// --- MODEL CONFIGURATIONS ---
+const proModel = genAI.getGenerativeModel ({
+  model: MODEL_NAME_PRO,
+  safetySettings: DEFAULT_SAFETY_SETTINGS,
+});
+const flashModel = genAI.getGenerativeModel ({
+  model: MODEL_NAME_FLASH,
+  safetySettings: DEFAULT_SAFETY_SETTINGS,
+});
+
+// --- NEW WILD FIND ANALYSIS FUNCTIONS (MULTI-STEP) ---
+
+async function getVisualAnalysis (fileObject) {
+  if (!fileObject || !fileObject.buffer || !fileObject.mimetype) {
+    throw new Error ('Invalid file object provided for visual analysis.');
+  }
+  const imagePart = {
+    inlineData: {
+      data: fileObject.buffer.toString ('base64'),
+      mimeType: fileObject.mimetype,
+    },
+  };
+
+  const prompt = `Analyze the provided image to identify ALL distinct pieces of vintage audio equipment shown.
+For each item, provide:
+1.  Manufacturer (make): Be as specific as possible. If entirely undeterminable, use "Unidentified Make".
+2.  Model name/number (model): Be as specific as possible. Avoid generic terms like 'Unknown'. If a specific model cannot be determined despite your best effort, use "Model Not Clearly Identifiable".
+3.  Visual Condition (conditionDescription): A detailed description of the item's visual condition.
+
+Return your response as an array of objects in the specified JSON format.
+If you cannot identify any items, return an empty array.`;
+
+  const schema = {
+    type: 'ARRAY',
+    items: {
+      type: 'OBJECT',
+      properties: {
+        make: {
+          type: 'STRING',
+          description: 'The manufacturer of the equipment.',
+        },
+        model: {
+          type: 'STRING',
+          description: 'The model name or number of the equipment.',
+        },
+        conditionDescription: {
+          type: 'STRING',
+          description: "A detailed description of the item's visual condition.",
+        },
+      },
+      required: ['make', 'model', 'conditionDescription'],
+    },
+  };
+
+  try {
+    // *** CHANGED TO proModel for potentially better identification accuracy ***
+    const result = await proModel.generateContent ({
+      contents: [{role: 'user', parts: [imagePart, {text: prompt}]}],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: schema,
+        // Consider adding temperature if results are too rigid or too creative
+        // temperature: 0.6,
+      },
+    });
+    return JSON.parse (result.response.text ());
+  } catch (error) {
+    console.error ('Error in getVisualAnalysis with proModel:', error);
+    // Fallback to flashModel if proModel fails for some reason (optional, or just let it error)
+    // console.log('Falling back to flashModel for getVisualAnalysis');
+    // try {
+    //   const fallbackResult = await flashModel.generateContent ({
+    //     contents: [{role: 'user', parts: [imagePart, {text: prompt}]}],
+    //     generationConfig: {
+    //       responseMimeType: 'application/json',
+    //       responseSchema: schema,
+    //     },
+    //   });
+    //   return JSON.parse (fallbackResult.response.text ());
+    // } catch (fallbackError) {
+    //   console.error ('Error in getVisualAnalysis with flashModel fallback:', fallbackError);
+    //   throw new Error (`Gemini AI visual analysis failed on both models: ${fallbackError.message}`);
+    // }
+    throw new Error (`Gemini AI visual analysis failed: ${error.message}`);
+  }
+}
+
+async function getFactualFeatures (make, model) {
+  const prompt = `Act as a vintage audio archivist. Using your knowledge base, provide the key features and common technical specifications for the following piece of equipment: ${make} ${model}. Prioritize factual information commonly found in manuals or reputable reviews. List the key features as an array of strings. For specifications, provide an array of objects, where each object has a "name" and a "value". Return your response in the specified JSON format. If the model is too generic (e.g. "Model Not Clearly Identifiable", "Unknown Model"), state that features and specs cannot be provided for a non-specific model.`;
+  const schema = {
+    type: 'OBJECT',
+    properties: {
+      keyFeatures: {
+        type: 'ARRAY',
+        items: {type: 'STRING'},
+        description: 'A list of notable features. Can be empty if model is too generic.',
+      },
+      specifications: {
+        type: 'ARRAY',
+        description: 'A list of technical specifications. Can be empty if model is too generic.',
+        items: {
+          type: 'OBJECT',
+          properties: {
+            name: {
+              type: 'STRING',
+              description: 'The name of the specification (e.g., Power output).',
+            },
+            value: {
+              type: 'STRING',
+              description: 'The value of the specification (e.g., 45 watts per channel).',
+            },
+          },
+          required: ['name', 'value'],
+        },
+      },
+      message: {
+        // Optional message field
+        type: 'STRING',
+        description: 'A message, e.g., if features/specs cannot be provided for a non-specific model.',
+      },
+    },
+    required: ['keyFeatures', 'specifications'],
+  };
+  try {
+    const result = await proModel.generateContent ({
+      contents: [{role: 'user', parts: [{text: prompt}]}],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: schema,
+      },
+    });
+    return JSON.parse (result.response.text ());
+  } catch (error) {
+    console.error ('Error in getFactualFeatures:', error);
+    throw new Error (
+      `Gemini AI factual feature retrieval failed: ${error.message}`
+    );
+  }
+}
+
+async function getSynthesizedValuation (visualData, factualData) {
+  const prompt = `Act as a vintage audio equipment appraiser. You need to provide an estimated market value for an item.
+Item Context:
+Make: ${visualData.make}
+Model: ${visualData.model}
+Key Features: ${factualData.keyFeatures && factualData.keyFeatures.length > 0 ? factualData.keyFeatures.join (', ') : 'Not available or not specific.'}
+Observed Condition: ${visualData.conditionDescription}
+${factualData.message ? 'Note from feature analysis: ' + factualData.message : ''}
+
+Your Task: Based on ALL the information above, provide an estimated market value range in USD.
+Crucially, provide a brief reasoning that explains how the item's features (or lack of specific features if model is generic) and its specific visual condition justify the estimated value.
+For example, mention if the value is higher due to rarity or lower due to cosmetic damage or if a specific valuation is difficult due to a generic model.
+Include a standard disclaimer. Return your response in the specified JSON format.`;
+  const schema = {
+    type: 'OBJECT',
+    properties: {
+      valueRange: {
+        type: 'STRING',
+        description: 'The estimated market value range in USD (e.g., "$250 - $350", or "Difficult to determine for generic model").',
+      },
+      reasoning: {
+        type: 'STRING',
+        description: "The explanation linking the item's condition and features to its value.",
+      },
+      disclaimer: {
+        type: 'STRING',
+        description: 'A standard disclaimer about the estimate.',
+      },
+    },
+    required: ['valueRange', 'reasoning', 'disclaimer'],
+  };
+  try {
+    const result = await proModel.generateContent ({
+      contents: [{role: 'user', parts: [{text: prompt}]}],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: schema,
+      },
+    });
+    return JSON.parse (result.response.text ());
+  } catch (error) {
+    console.error ('Error in getSynthesizedValuation:', error);
+    throw new Error (`Gemini AI valuation synthesis failed: ${error.message}`);
+  }
+}
+
+// --- EXISTING AI FUNCTIONS (FOR ITEMS ALREADY IN DATABASE) ---
 const valueInsightModel = genAI.getGenerativeModel ({
-  model: 'gemini-1.5-pro',
-  safetySettings: [
-    {
-      category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-      threshold: HarmBlockThreshold.BLOCK_NONE,
-    },
-    {
-      category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-      threshold: HarmBlockThreshold.BLOCK_NONE,
-    },
-    {
-      category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-      threshold: HarmBlockThreshold.BLOCK_NONE,
-    },
-    {
-      category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-      threshold: HarmBlockThreshold.BLOCK_NONE,
-    },
-  ],
+  model: MODEL_NAME_PRO,
+  safetySettings: DEFAULT_SAFETY_SETTINGS,
   generationConfig: {
     temperature: 0.7,
     topP: 0.95,
@@ -71,27 +265,9 @@ const valueInsightModel = genAI.getGenerativeModel ({
   },
 });
 
-// --- Model for Gear Suggestions (No changes to model config, only prompt will change) ---
 const suggestionsModel = genAI.getGenerativeModel ({
-  model: 'gemini-1.5-pro',
-  safetySettings: [
-    {
-      category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-      threshold: HarmBlockThreshold.BLOCK_NONE,
-    },
-    {
-      category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-      threshold: HarmBlockThreshold.BLOCK_NONE,
-    },
-    {
-      category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-      threshold: HarmBlockThreshold.BLOCK_NONE,
-    },
-    {
-      category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-      threshold: HarmBlockThreshold.BLOCK_NONE,
-    },
-  ],
+  model: MODEL_NAME_PRO,
+  safetySettings: DEFAULT_SAFETY_SETTINGS,
   generationConfig: {
     temperature: 0.8,
     topP: 0.95,
@@ -129,7 +305,6 @@ const suggestionsModel = genAI.getGenerativeModel ({
   },
 });
 
-// Helper function to convert image URL to Base64 (No changes here)
 async function urlToBase64 (url) {
   try {
     const response = await axios.get (url, {responseType: 'arraybuffer'});
@@ -145,19 +320,12 @@ async function urlToBase64 (url) {
   }
 }
 
-/**
- * Generates a market value insight for an audio item.
- * (No changes to this function's logic, just uses the dedicated valueInsightModel)
- */
 async function getAiValueInsight (make, model, condition, imageUrls = []) {
   const itemInfo = `Item: ${make} ${model}, Condition: ${condition}.`;
   const personaAndTask = `You are a vintage audio equipment expert providing a market valuation. Based on the provided item information and any images, analyze its key features, production era, and market desirability. Provide a concise description, production dates, market desirability assessment, and an estimated market value range in USD. If a value cannot be determined, state that clearly.`;
-
   const parts = [{text: `${personaAndTask}\n${itemInfo}`}];
-
   if (imageUrls && imageUrls.length > 0) {
     const imagePartsPromises = imageUrls.slice (0, 5).map (async url => {
-      // Process up to 5 images
       const imageBase64 = await urlToBase64 (url);
       if (imageBase64) {
         return {inlineData: imageBase64};
@@ -180,14 +348,11 @@ async function getAiValueInsight (make, model, condition, imageUrls = []) {
   } else {
     parts.push ({text: '\nNo images provided.'});
   }
-
   try {
     const result = await valueInsightModel.generateContent ({
       contents: [{role: 'user', parts: parts}],
     });
-    const response = await result.response;
-    const parsedResponse = JSON.parse (response.text ());
-    // Ensure disclaimer is always present, even if AI provides one.
+    const parsedResponse = JSON.parse (result.response.text ());
     parsedResponse.disclaimer =
       'This is an automated estimate for informational purposes only and not a formal appraisal. Market values fluctuate.';
     return parsedResponse;
@@ -208,40 +373,17 @@ async function getAiValueInsight (make, model, condition, imageUrls = []) {
   }
 }
 
-/**
- * Suggests related vintage audio equipment.
- * (MODIFIED PROMPT within this function)
- */
 async function getRelatedGearSuggestions (
   make,
   model,
   itemType,
   imageUrls = []
 ) {
-  // --- MODIFIED PROMPT ---
   const itemInfo = `The provided item is a ${make} ${model} (Type: ${itemType}).`;
-  let personaAndTask = `You are a knowledgeable vintage audio aficionado and system building expert. Your task is to suggest 3-5 complementary vintage audio components that would pair exceptionally well with the provided item.
-
-${itemInfo}
-
-Consider the following when making your suggestions:
-1.  Complementary Nature: Suggest components that complete or enhance a system with the provided item. For example:
-    - If the item is a Receiver or Amplifier, suggest suitable Speakers, a Turntable, a Tape Deck, or a CD Player. **Do NOT suggest another Receiver or Amplifier.**
-    - If the item is a Turntable, suggest a compatible Phono Pre-amplifier (if needed), Receiver/Amplifier, or Speakers. **Do NOT suggest another Turntable.**
-    - If the item is Speakers, suggest a suitable Receiver/Amplifier. **Do NOT suggest other Speakers.**
-    - If the item is a source component like a Tape Deck or CD Player, suggest a Receiver/Amplifier or Integrated Amplifier.
-2.  Era and Aesthetics: Prioritize components from a similar manufacturing era or those with a compatible aesthetic to create a visually and historically cohesive system.
-3.  Manufacturer Synergy: Pay special attention to other components that ${make} (the manufacturer of the input item) might have released as part of the same product line or system around the time the ${model} was produced. These are often designed to work well together.
-4.  Reasoning: For each suggestion, briefly explain why it's a good match (e.g., sonic synergy, contemporary pairing, aesthetic compatibility, part of the original system).
-
-Provide your suggestions in the specified JSON format.`;
-  // --- END MODIFIED PROMPT ---
-
+  let personaAndTask = `You are a knowledgeable vintage audio aficionado and system building expert. Your task is to suggest 3-5 complementary vintage audio components that would pair exceptionally well with the provided item. ${itemInfo} Consider the following when making your suggestions: 1. Complementary Nature: Suggest components that complete or enhance a system with the provided item. For example: - If the item is a Receiver or Amplifier, suggest suitable Speakers, a Turntable, a Tape Deck, or a CD Player. **Do NOT suggest another Receiver or Amplifier.** - If the item is a Turntable, suggest a compatible Phono Pre-amplifier (if needed), Receiver/Amplifier, or Speakers. **Do NOT suggest another Turntable.** - If the item is Speakers, suggest a suitable Receiver/Amplifier. **Do NOT suggest other Speakers.** - If the item is a source component like a Tape Deck or CD Player, suggest a Receiver/Amplifier or Integrated Amplifier. 2. Era and Aesthetics: Prioritize components from a similar manufacturing era or those with a compatible aesthetic to create a visually and historically cohesive system. 3. Manufacturer Synergy: Pay special attention to other components that ${make} (the manufacturer of the input item) might have released as part of the same product line or system around the time the ${model} was produced. These are often designed to work well together. 4. Reasoning: For each suggestion, briefly explain why it's a good match (e.g., sonic synergy, contemporary pairing, aesthetic compatibility, part of the original system). Provide your suggestions in the specified JSON format.`;
   const parts = [{text: personaAndTask}];
-
   if (imageUrls && imageUrls.length > 0) {
     const imagePartsPromises = imageUrls.slice (0, 3).map (async url => {
-      // Process up to 3 images for suggestions
       const imageBase64 = await urlToBase64 (url);
       if (imageBase64) {
         return {inlineData: imageBase64};
@@ -264,13 +406,11 @@ Provide your suggestions in the specified JSON format.`;
   } else {
     parts.push ({text: '\nNo images provided for suggestions.'});
   }
-
   try {
     const result = await suggestionsModel.generateContent ({
       contents: [{role: 'user', parts: parts}],
     });
-    const response = await result.response;
-    return JSON.parse (response.text ());
+    return JSON.parse (result.response.text ());
   } catch (e) {
     console.error (
       'Failed to parse JSON response from Gemini for suggestions or API error:',
@@ -278,7 +418,7 @@ Provide your suggestions in the specified JSON format.`;
       e.response ? e.response.text () : 'No detailed API response text.'
     );
     return {
-      error: 'AI response could not be parsed or API error.', // Added error field
+      error: 'AI response could not be parsed or API error.',
       suggestions: [
         {
           make: 'Error',
@@ -290,49 +430,49 @@ Provide your suggestions in the specified JSON format.`;
   }
 }
 
-/**
- * Generates a description for an image using the Gemini AI model.
- * @param {GoogleGenerativeAI} geminiInstance - The initialized Gemini AI client (passed from app.locals.gemini).
- * @param {object} fileObject - The file object from Multer (req.file), containing the image buffer and mimetype.
- * @returns {Promise<string>} A promise that resolves to the image description.
- */
-async function getGeminiImageDescription (geminiInstance, fileObject) {
-  try {
-    if (!geminiInstance) {
-      throw new Error ('Gemini AI instance is not provided.');
-    }
-    if (!fileObject || !fileObject.buffer || !fileObject.mimetype) {
-      throw new Error ('Invalid file object provided for image description.');
-    }
-
-    const model = geminiInstance.getGenerativeModel ({
-      model: 'gemini-1.5-flash',
+// --- GCS HELPER FUNCTIONS ---
+const uploadToGcs = (file, bucketName, storage) =>
+  new Promise ((resolve, reject) => {
+    const bucket = storage.bucket (bucketName);
+    const blob = bucket.file (
+      `audio-items/${Date.now ()}-${file.originalname.replace (/ /g, '_')}`
+    );
+    const stream = blob.createWriteStream ({
+      metadata: {contentType: file.mimetype},
+      resumable: false,
     });
+    stream.on ('error', err => {
+      console.error ('GCS Upload Stream Error:', err);
+      reject (err);
+    });
+    stream.on ('finish', () => {
+      const publicUrl = `https://storage.googleapis.com/${bucketName}/${blob.name}`;
+      resolve (publicUrl);
+    });
+    stream.end (file.buffer);
+  });
 
-    const imagePart = {
-      inlineData: {
-        data: fileObject.buffer.toString ('base64'), // Convert buffer to base64
-        mimeType: fileObject.mimetype,
-      },
-    };
-
-    const prompt = `Describe this image in detail. What is it? What are its key features? If it's audio equipment, try to identify the make and model if possible.
-Based on the visual information, provide an assessment of its apparent physical condition (e.g., excellent, good, fair, poor, with brief reasoning).
-If possible, also give a very general indication of its potential market value, including an estimated dollar value range (e.g., $50 - $150 USD, or $500 - $800 USD) if you can infer it from the visual information and typical market understanding for such items.
-Always include a disclaimer that this visual assessment and any value indication are not a formal appraisal and actual value depends on many factors including functionality, internal condition, and market demand.`;
-
-    const result = await model.generateContent ([prompt, imagePart]);
-    const response = await result.response;
-    const text = response.text ();
-    return text;
+const deleteFromGcs = async (fileUrl, bucketName, storage) => {
+  try {
+    const bucket = storage.bucket (bucketName);
+    const fileName = fileUrl.split (`${bucketName}/`)[1];
+    if (fileName) {
+      await bucket.file (fileName).delete ();
+      console.log (`Successfully deleted ${fileName} from GCS.`);
+    }
   } catch (error) {
-    console.error ('Error in getGeminiImageDescription:', error);
-    throw new Error (`Gemini AI image description failed: ${error.message}`);
+    console.error (`Failed to delete file from GCS: ${fileUrl}`, error);
+    // Optionally re-throw or handle more gracefully depending on requirements
+    // For now, just logging, as per original code.
   }
-}
+};
 
 module.exports = {
+  getVisualAnalysis,
+  getFactualFeatures,
+  getSynthesizedValuation,
   getAiValueInsight,
   getRelatedGearSuggestions,
-  getGeminiImageDescription,
+  uploadToGcs,
+  deleteFromGcs,
 };
