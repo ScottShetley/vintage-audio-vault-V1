@@ -3,86 +3,69 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
 
-const DashboardPage = () => {
+// 1. Accept token as a prop
+const DashboardPage = ({ token }) => {
   const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Function to handle fetching items
-  const fetchItems = async () => {
-    setLoading(true);
-    setError(null);
-    const token = localStorage.getItem('token');
-
-    if (!token) {
-      setError('Authorization token not found. Please login.');
-      setLoading(false);
-      navigate('/login'); // Redirect to login if no token
-      return;
-    }
-
-    try {
-      const response = await axios.get('http://localhost:5000/api/items', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      setItems(response.data); // Corrected: response.data is the array of items
-    } catch (err) {
-      console.error('Failed to load items:', err);
-      if (err.response && (err.response.status === 401 || err.response.status === 403)) {
-        // Token invalid or expired, redirect to login
-        localStorage.removeItem('token'); // Clear invalid token
-        navigate('/login');
-      } else {
-        setError(err.response?.data?.message || 'Failed to load items. Please try again.');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // useEffect to fetch items on component mount
+  // 2. useEffect now depends on the token
   useEffect(() => {
-    fetchItems();
-  }, []); // Empty dependency array means this runs once on mount
+    const fetchItems = async () => {
+      setLoading(true);
+      setError(null);
+      
+      try {
+        const response = await axios.get('http://localhost:5000/api/items', {
+          headers: {
+            // 3. Use the token from props for authorization
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        setItems(response.data);
+      } catch (err) {
+        console.error('Failed to load items:', err);
+        if (err.response && (err.response.status === 401 || err.response.status === 403)) {
+          // Clear invalid token using the correct key
+          localStorage.removeItem('authToken');
+          navigate('/login');
+        } else {
+          setError(err.response?.data?.message || 'Failed to load items. Please try again.');
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  // Function to handle logout
-  const handleLogout = () => {
-    localStorage.removeItem('token'); // Remove JWT token
-    navigate('/login'); // Redirect to login page
-  };
+    // Only fetch items if a token exists
+    if (token) {
+      fetchItems();
+    } else {
+      // If no token, don't try to fetch. Clear items and stop loading.
+      setItems([]);
+      setLoading(false);
+    }
+  }, [token, navigate]); // Dependency array now includes token and navigate
 
-  // Placeholder image URL for items without photos
+  // 4. Redundant handleLogout function has been removed
+
   const placeholderImageUrl = 'https://placehold.co/150x150/2C2C2C/E0E0E0?text=No+Image';
 
   return (
-    // This div is the main container for the page's content.
-    // It will be centered by the <main> tag in App.jsx.
-    // We apply max-w-6xl to this div, and mx-auto to center it within the <main> tag's available space.
     <div className="w-full max-w-6xl mx-auto p-4">
-      {/* Header section: Stacks on mobile, side-by-side on medium screens and up */}
-      <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4"> {/* MODIFIED CLASSES */}
-        <h1 className="text-4xl font-serif text-vav-accent-primary text-center md:text-left">Dashboard</h1> {/* Centered on mobile, left on md+ */}
-        <div className="flex gap-4"> {/* Group buttons together */}
-          {/* Add New Item Button (always visible when logged in) */}
-          <Link
-            to="/add-item"
-            className="bg-vav-accent-primary text-vav-background px-4 py-2 rounded-md shadow-md hover:bg-vav-accent-secondary transition-colors duration-150 ease-in-out flex items-center"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
-            </svg>
-            Add New Item
-          </Link>
-          <button
-            onClick={handleLogout}
-            className="bg-vav-accent-secondary text-white px-4 py-2 rounded-md shadow-md hover:opacity-90 transition-opacity"
-          >
-            Logout
-          </button>
-        </div>
+      <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+        <h1 className="text-4xl font-serif text-vav-accent-primary text-center md:text-left">Dashboard</h1>
+        {/* 5. The redundant logout button is removed, Add Item remains */}
+        <Link
+          to="/add-item"
+          className="bg-vav-accent-primary text-vav-background px-4 py-2 rounded-md shadow-md hover:bg-vav-accent-secondary transition-colors duration-150 ease-in-out flex items-center"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
+          </svg>
+          Add New Item
+        </Link>
       </div>
 
       <h2 className="text-2xl font-serif text-vav-text-secondary mb-6 text-center">Your Vintage Audio Collection</h2>
@@ -134,11 +117,8 @@ const DashboardPage = () => {
                 {item.make} {item.model}
               </h3>
               <p className="text-sm text-vav-text-secondary">{item.itemType}</p>
-              {/* Add more item details here as needed for the card */}
-              {/* Example: <p className="text-xs text-vav-text">Condition: {item.condition}</p> */}
-              {/* Link to detailed item view (to be implemented later) */}
               <Link
-                to={`/item/${item._id}`} // Example: /item/123
+                to={`/item/${item._id}`}
                 className="mt-2 text-sm text-vav-accent-primary hover:text-vav-accent-secondary transition-colors"
               >
                 View Details

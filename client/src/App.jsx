@@ -1,6 +1,6 @@
 // client/src/App.jsx
-import React from 'react';
-import {BrowserRouter as Router, Routes, Route, Link} from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Link, useNavigate } from 'react-router-dom';
 
 // Import your page components
 import LoginPage from './pages/LoginPage';
@@ -11,108 +11,96 @@ import AddItemPage from './pages/AddItemPage';
 import DetailedItemView from './pages/DetailedItemView';
 import EditItemPage from './pages/EditItemPage';
 import WildFindPage from './pages/WildFindPage';
-import AdAnalyzerPage from './pages/AdAnalyzerPage'; // Import the new AdAnalyzerPage
+import AdAnalyzerPage from './pages/AdAnalyzerPage';
+import LandingPage from './pages/LandingPage';
+import InstructionsPage from './pages/InstructionsPage';
+import MarketplacePage from './pages/MarketplacePage';
 
 // Your main CSS file which now includes Tailwind directives
 import './index.css';
 
-function App () {
+function App() {
+  const [token, setToken] = useState(localStorage.getItem('authToken'));
+  
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const storedToken = localStorage.getItem('authToken');
+    if (storedToken) {
+      setToken(storedToken);
+    }
+  }, []);
+
+  const handleLogout = () => {
+    setToken(null);
+    localStorage.removeItem('authToken');
+    navigate('/');
+  };
+
   return (
-    <Router>
-      {/* Apply the overall dark theme using Tailwind classes and custom colors */}
-      {/* This outer div ensures the entire viewport is covered with the background */}
-      <div className="min-h-screen bg-vav-background text-vav-text font-sans flex flex-col items-center p-5 box-border">
-        {/* Navigation bar - centered and responsive width */}
-        <nav className="w-full max-w-full md:max-w-4xl lg:max-w-6xl mb-10 py-4 border-b border-vav-content-card flex justify-center items-center mx-auto">
-          <ul className="flex gap-8 list-none p-0 m-0">
-            <li>
-              <Link
-                to="/login"
-                className="text-vav-accent-primary text-lg font-bold no-underline hover:text-vav-text transition-colors"
-              >
-                Login
-              </Link>
-            </li>
-            <li>
-              <Link
-                to="/signup"
-                className="text-vav-accent-primary text-lg font-bold no-underline hover:text-vav-text transition-colors"
-              >
-                Sign Up
-              </Link>
-            </li>
-            <li>
-              <Link
-                to="/dashboard"
-                className="text-vav-accent-primary text-lg font-bold no-underline hover:text-vav-text transition-colors"
-              >
-                Dashboard
-              </Link>
-            </li>
-            {/* Add link for the Wild Find page */}
-            <li>
-              <Link
-                to="/wild-find"
-                className="text-vav-accent-primary text-lg font-bold no-underline hover:text-vav-text transition-colors"
-              >
-                Wild Find
-              </Link>
-            </li>
-            {/* Add link for the new Ad Analyzer page */}
-            <li>
-              <Link
-                to="/ad-analyzer"
-                className="text-vav-accent-primary text-lg font-bold no-underline hover:text-vav-text transition-colors"
-              >
-                Ad Analyzer
-              </Link>
-            </li>
-          </ul>
-        </nav>
+    <div className="min-h-screen bg-vav-background text-vav-text font-sans flex flex-col items-center p-5 box-border">
+      <nav className="w-full max-w-full md:max-w-4xl lg:max-w-6xl mb-10 py-4 border-b border-vav-content-card flex justify-between items-center mx-auto">
+        <Link to={token ? "/dashboard" : "/"} className="text-2xl font-bold text-vav-accent-primary no-underline">
+          Vintage Audio Vault
+        </Link>
+        <ul className="flex gap-6 items-center list-none p-0 m-0">
+          {token ? (
+            // Logged IN Links
+            <>
+              <li><Link to="/dashboard" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Dashboard</Link></li>
+              <li><Link to="/wild-find" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Wild Find</Link></li>
+              <li><Link to="/ad-analyzer" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Ad Analyzer</Link></li>
+              <li><Link to="/marketplace" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Marketplace</Link></li>
+              <li><Link to="/instructions" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Instructions</Link></li>
+              <li>
+                <button onClick={handleLogout} className="bg-vav-accent-primary hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition-colors">
+                  Logout
+                </button>
+              </li>
+            </>
+          ) : (
+            // Logged OUT Links
+            <>
+              <li><Link to="/instructions" className="text-lg font-bold text-vav-accent-primary hover:text-vav-text transition-colors">Instructions</Link></li>
+              <li><Link to="/login" className="text-lg font-bold text-vav-accent-primary hover:text-vav-text transition-colors">Login</Link></li>
+              <li><Link to="/signup" className="text-lg font-bold text-vav-accent-primary hover:text-vav-text transition-colors">Sign Up</Link></li>
+            </>
+          )}
+        </ul>
+      </nav>
 
-        {/* Main content area - takes available space, centered and responsive width */}
-        {/* This main tag will be a flex container that centers its direct child (the page component) */}
-        <main className="w-full max-w-full md:max-w-3xl lg:max-w-5xl flex-grow flex flex-col items-center justify-center mx-auto">
-          {/* Define your routes here */}
-          <Routes>
-            {/* Public routes */}
-            <Route
-              path="/"
-              element={
-                <p className="text-center mt-12 text-xl text-vav-text">
-                  Welcome to Vintage Audio Vault! Please Login or Sign Up.
-                </p>
-              }
-            />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/signup" element={<SignupPage />} />
+      <main className="w-full max-w-full md:max-w-3xl lg:max-w-5xl flex-grow flex flex-col items-center justify-center mx-auto">
+        <Routes>
+          {/* Public routes */}
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/instructions" element={<InstructionsPage />} />
+          <Route path="/login" element={<LoginPage setToken={setToken} />} />
+          <Route path="/signup" element={<SignupPage setToken={setToken} />} />
 
-            {/* Protected Routes */}
-            <Route element={<ProtectedRoute />}>
-              <Route path="/dashboard" element={<DashboardPage />} />
-              <Route path="/add-item" element={<AddItemPage />} />
-              <Route path="/item/:id" element={<DetailedItemView />} />
-              <Route path="/edit-item/:id" element={<EditItemPage />} />
-              <Route path="/wild-find" element={<WildFindPage />} />
-              <Route path="/ad-analyzer" element={<AdAnalyzerPage />} />
-              {' '}
-              {/* Add the new protected route for AdAnalyzerPage */}
-            </Route>
+          {/* Protected Routes */}
+          <Route element={<ProtectedRoute />}>
+            {/* The token prop is now passed to DashboardPage */}
+            <Route path="/dashboard" element={<DashboardPage token={token} />} />
+            <Route path="/add-item" element={<AddItemPage />} />
+            <Route path="/item/:id" element={<DetailedItemView />} />
+            <Route path="/edit-item/:id" element={<EditItemPage />} />
+            <Route path="/wild-find" element={<WildFindPage />} />
+            <Route path="/ad-analyzer" element={<AdAnalyzerPage />} />
+            <Route path="/marketplace" element={<MarketplacePage />} />
+          </Route>
 
-            {/* Catch-all route for 404s */}
-            <Route
-              path="*"
-              element={
-                <p className="text-center mt-12 text-xl text-vav-text">
-                  404 - Page Not Found
-                </p>
-              }
-            />
-          </Routes>
-        </main>
-      </div>
-    </Router>
+          {/* Catch-all route for 404s */}
+          <Route path="*" element={<p className="text-center mt-12 text-xl text-vav-text">404 - Page Not Found</p>} />
+        </Routes>
+      </main>
+    </div>
   );
 }
 
-export default App;
+const AppWrapper = () => (
+  <Router>
+    <App />
+  </Router>
+);
+
+export default AppWrapper;
