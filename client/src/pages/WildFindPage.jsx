@@ -4,32 +4,22 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import styles from './WildFindPage.module.css';
 
-// Helper component to format AI descriptions (remains the same)
-function FormattedAiDescription({ description }) {
-  if (!description) return null;
-  const blocks = description.split(/\n+/).map(block => block.trim()).filter(block => block.length > 0);
+// Re-using the component from SavedFindDetailsPage for consistency
+function FormattedAiDescription({ text }) {
+  if (!text) return null;
+  // Split by newline and filter out empty strings
+  const paragraphs = text.split('\n').filter(p => p.trim() !== '');
   return (
     <div>
-      {blocks.map((block, index) => {
-        if (block.startsWith('**') && block.endsWith(':**')) {
-          const headingText = block.substring(2, block.length - 2);
-          return ( <h3 key={index} className="text-xl font-semibold text-vav-accent-primary mt-4 mb-2"> {headingText}: </h3> );
-        }
-        if (block.startsWith('* ')) {
-          const listItemContent = block.substring(2);
-          const parts = listItemContent.split('**');
-          return (
-            <p key={index} className="text-vav-text ml-4 mb-1 pl-2" style={{ textIndent: '-1em' }}>
-              <span className="mr-2">&bull;</span>
-              {parts.map((part, i) => i % 2 === 1 ? <strong key={i} className="font-semibold text-vav-text-secondary">{part}</strong> : part )}
-            </p>
-          );
-        }
-        return ( <p key={index} className="text-vav-text mb-3 whitespace-pre-wrap break-words"> {block} </p> );
-      })}
+      {paragraphs.map((paragraph, index) => (
+        <p key={index} className="text-vav-text mb-2 last:mb-0">
+          {paragraph.startsWith('- ') ? `• ${paragraph.substring(2)}` : paragraph}
+        </p>
+      ))}
     </div>
   );
 }
+
 
 function WildFindPage() {
   const [selectedFile, setSelectedFile] = useState(null);
@@ -42,9 +32,8 @@ function WildFindPage() {
   const [error, setError] = useState(null);
   const [currentStep, setCurrentStep] = useState('upload');
   
-  // 1. ADD NEW STATE FOR SAVING FUNCTIONALITY
-  const [savedImageUrl, setSavedImageUrl] = useState(null); // To store the public URL of the uploaded image
-  const [saveStatuses, setSaveStatuses] = useState({}); // To track save status for each item { 0: 'idle', 1: 'saving', 2: 'saved' }
+  const [savedImageUrl, setSavedImageUrl] = useState(null);
+  const [saveStatuses, setSaveStatuses] = useState({});
   
   const navigate = useNavigate();
 
@@ -57,7 +46,6 @@ function WildFindPage() {
     setFinalAnalysisResult(null);
     setError(null);
     setCurrentStep('upload');
-    // Also reset the new states
     setSavedImageUrl(null);
     setSaveStatuses({});
   };
@@ -90,7 +78,6 @@ function WildFindPage() {
 
     const formData = new FormData();
     formData.append('image', selectedFile);
-    // Standardizing to 'authToken' for consistency
     const token = localStorage.getItem('authToken');
 
     if (!token) {
@@ -106,8 +93,6 @@ function WildFindPage() {
       });
 
       if (response.data && response.data.status === 'success' && response.data.scannedItems) {
-        // 2. CAPTURE THE IMAGE URL FROM THE BACKEND RESPONSE
-        // This assumes your backend returns the public URL of the uploaded image.
         if (response.data.imageUrl) {
             setSavedImageUrl(response.data.imageUrl);
         } else {
@@ -214,7 +199,7 @@ function WildFindPage() {
     }
   };
 
-  // 3. CREATE THE NEW FUNCTION TO HANDLE SAVING A FIND
+  // UPDATED to send the full analysis object
   const handleSaveFind = async (analysisToSave, index) => {
     const token = localStorage.getItem('authToken');
     if (!token || !savedImageUrl) {
@@ -226,13 +211,10 @@ function WildFindPage() {
     setSaveStatuses(prev => ({ ...prev, [index]: 'saving' }));
 
     try {
+        // The entire analysisToSave object now matches the schema we need.
         const payload = {
             imageUrl: savedImageUrl,
-            analysis: {
-                identifiedItem: `${analysisToSave.make} ${analysisToSave.model}`,
-                visualCondition: analysisToSave.conditionDescription,
-                estimatedValue: analysisToSave.valueRange,
-            }
+            analysis: analysisToSave 
         };
 
         await axios.post('/api/wild-finds', payload, {
@@ -258,7 +240,7 @@ function WildFindPage() {
           <div className={`${styles.contentCard} mb-6`}>
             <div className="mb-4">
               <label htmlFor="imageUpload" className="block text-vav-text text-sm font-bold mb-2">Upload Image:</label>
-              <input type="file" id="imageUpload" accept="image/*" onChange={handleFileChange} className={`${styles.fileInput} file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-vav-accent-primary file:text-vav-background hover:file:bg-vav-accent-secondary`} />
+              <input type="file" id="imageUpload" accept="image/*" capture="environment" onChange={handleFileChange} className={`${styles.fileInput} file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-vav-accent-primary file:text-vav-background hover:file:bg-vav-accent-secondary`} />
             </div>
             {previewUrl && ( <div className="mb-4 text-center"> <img src={previewUrl} alt="Selected preview" className={`${styles.imagePreview}`} /> </div> )}
             {selectedFile && ( <p className="text-vav-text text-sm mb-4 text-center">Selected file: {selectedFile.name}</p> )}
@@ -311,39 +293,40 @@ function WildFindPage() {
           <button onClick={() => { setSelectedFile(null); setPreviewUrl(null); resetState(); }} className="mt-4 w-full text-sm text-vav-accent-secondary hover:text-vav-accent-primary text-center"> Start Over with a New Image </button>
         </>
       )}
-
+      
+      {/* UPDATED to display the new, comprehensive analysis fields */}
       {currentStep === 'results' && finalAnalysisResult && finalAnalysisResult.status === 'success' && (
         <div className="space-y-8 mt-8">
             {finalAnalysisResult.analyses.map((analysis, index) => (
                 <div key={index} className={`${styles.contentCard} ${styles.analysisResultSection}`}>
-                    <div className="text-center mb-4 border-b border-vav-text-secondary/30 pb-4">
-                        <h2 className="text-3xl font-bold text-vav-accent-primary">{analysis.make} {analysis.model}</h2>
+                    <div className="text-center mb-6 border-b border-vav-text-secondary/30 pb-4">
+                        <h2 className="text-3xl font-bold text-vav-accent-primary">{analysis.identifiedItem}</h2>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
-                        <div className="md:col-span-2 bg-vav-background p-4 rounded-md shadow-inner">
-                            <h3 className="text-xl font-semibold text-vav-accent-secondary mb-2">Valuation</h3>
-                            <p className="text-2xl font-bold text-vav-text mb-2">{analysis.valueRange}</p>
-                            <FormattedAiDescription description={analysis.reasoning} />
+                    
+                    <div className="space-y-6">
+                        <div className="bg-vav-background p-4 rounded-md shadow-inner">
+                            <h3 className="text-xl font-semibold text-vav-accent-secondary mb-2">Estimated Value</h3>
+                            <p className="text-2xl font-bold text-vav-text mb-2">{analysis.estimatedValue}</p>
                             <p className="text-xs text-vav-text-secondary/80 italic mt-4">{analysis.disclaimer}</p>
                         </div>
-                        <div className="md:col-span-3 bg-vav-background p-4 rounded-md shadow-inner">
-                            <h3 className="text-xl font-semibold text-vav-accent-secondary mb-2">Visual Condition Assessment</h3>
-                            <FormattedAiDescription description={analysis.conditionDescription} />
-                            <h3 className="text-xl font-semibold text-vav-accent-secondary mt-4 mb-2">Key Features</h3>
-                            <ul className="list-disc list-inside text-vav-text space-y-1">
-                                {analysis.keyFeatures?.map((feature, i) => <li key={i}>{feature}</li>)}
-                            </ul>
+
+                        <div className="bg-vav-background p-4 rounded-md shadow-inner">
+                            <h3 className="text-xl font-semibold text-vav-accent-secondary mb-2">Detailed Analysis</h3>
+                            <FormattedAiDescription text={analysis.detailedAnalysis} />
                         </div>
-                    </div>
-                    {analysis.specifications && analysis.specifications.length > 0 && (
-                        <div className="mt-6 bg-vav-background p-4 rounded-md shadow-inner">
-                            <h3 className="text-xl font-semibold text-vav-accent-secondary mb-3">Specifications</h3>
-                            <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-vav-text">
-                                {analysis.specifications.map((spec) => ( <React.Fragment key={spec.name}> <span className="font-semibold text-vav-text-secondary text-right">{spec.name}:</span> <span>{spec.value}</span> </React.Fragment> ))}
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="bg-vav-background p-4 rounded-md shadow-inner">
+                                <h3 className="text-xl font-semibold text-vav-accent-secondary mb-2">Potential Issues to Check</h3>
+                                <FormattedAiDescription text={analysis.potentialIssues} />
+                            </div>
+                            <div className="bg-vav-background p-4 rounded-md shadow-inner">
+                                <h3 className="text-xl font-semibold text-vav-accent-secondary mb-2">Common Restoration Tips</h3>
+                                <FormattedAiDescription text={analysis.restorationTips} />
                             </div>
                         </div>
-                    )}
-                    {/* 4. ADD THE SAVE BUTTON TO THE RESULTS CARD */}
+                    </div>
+
                     <div className="mt-6 pt-4 border-t border-vav-text-secondary/30 text-center">
                         <button
                             onClick={() => handleSaveFind(analysis, index)}
@@ -365,7 +348,6 @@ function WildFindPage() {
         </div>
       )}
 
-      {/* Other error/result states remain the same */}
       {currentStep === 'results' && finalAnalysisResult && finalAnalysisResult.status !== 'success' && (
          <div className={`${styles.contentCard} ${styles.analysisResultSection} mt-8`}>
             <h2 className="text-2xl font-bold text-vav-accent-primary text-center">Analysis Problem</h2>

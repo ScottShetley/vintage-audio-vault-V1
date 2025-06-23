@@ -44,7 +44,88 @@ const flashModel = genAI.getGenerativeModel ({
   safetySettings: DEFAULT_SAFETY_SETTINGS,
 });
 
-// --- NEW WILD FIND ANALYSIS FUNCTIONS (MULTI-STEP) ---
+// ===================================================================================
+//
+// ENHANCED "WILD FIND" ANALYSIS FUNCTION (SINGLE-STEP)
+//
+// ===================================================================================
+
+async function getComprehensiveWildFindAnalysis (
+  make,
+  model,
+  conditionDescription
+) {
+  const prompt = `
+    You are a vintage audio expert providing a detailed analysis for a "Wild Find".
+    
+    Item Details:
+    - Make: ${make}
+    - Model: ${model}
+    - Initial Visual Condition: "${conditionDescription}"
+
+    Your Task: Based on the item details and your knowledge base, generate a comprehensive report. The report must be a JSON object and include all of the following fields:
+
+    1.  "identifiedItem": A string combining the make and model (e.g., "Marantz 2270").
+    2.  "visualCondition": A string containing the original visual condition description provided above.
+    3.  "estimatedValue": A string representing the estimated market value range in USD (e.g., "$400 - $600").
+    4.  "detailedAnalysis": A detailed paragraph describing the item, its history, its reputation (e.g., sound quality, build quality), and its place in the vintage audio market.
+    5.  "potentialIssues": A bulleted list of common problems or age-related issues to check for with this specific model (e.g., "Failing capacitors in the power supply section", "Scratchy potentiometers", "Burnt out dial lamps"). Format this as a single string with each point starting with a hyphen and separated by a newline character (\\n).
+    6.  "restorationTips": A bulleted list of common restoration or enhancement tips for this model (e.g., "Consider a full recap with modern audio-grade capacitors", "Upgrade speaker binding posts for better connectivity", "Clean all switches and potentiometers with DeoxIT"). Format this as a single string with each point starting with a hyphen and separated by a newline character (\\n).
+    7.  "disclaimer": A standard disclaimer stating that this is an AI-generated estimate and professional evaluation is recommended.
+
+    Return ONLY the raw JSON object.
+    `;
+
+  const schema = {
+    type: 'OBJECT',
+    properties: {
+      identifiedItem: {type: 'STRING'},
+      visualCondition: {type: 'STRING'},
+      estimatedValue: {type: 'STRING'},
+      detailedAnalysis: {type: 'STRING'},
+      potentialIssues: {type: 'STRING'},
+      restorationTips: {type: 'STRING'},
+      disclaimer: {type: 'STRING'},
+    },
+    required: [
+      'identifiedItem',
+      'visualCondition',
+      'estimatedValue',
+      'detailedAnalysis',
+      'potentialIssues',
+      'restorationTips',
+      'disclaimer',
+    ],
+  };
+
+  try {
+    const result = await proModel.generateContent ({
+      contents: [{role: 'user', parts: [{text: prompt}]}],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: schema,
+        temperature: 0.6,
+      },
+    });
+    const responseText = result.response.text ();
+    return JSON.parse (responseText);
+  } catch (error) {
+    console.error ('Error in getComprehensiveWildFindAnalysis:', error);
+    // Return a structured error object that matches the schema to prevent frontend crashes
+    return {
+      error: `Gemini AI comprehensive analysis failed: ${error.message}`,
+      identifiedItem: `${make} ${model}`,
+      visualCondition: conditionDescription,
+      estimatedValue: 'Error',
+      detailedAnalysis: 'Could not generate detailed analysis due to an error.',
+      potentialIssues: 'Could not generate potential issues due to an error.',
+      restorationTips: 'Could not generate restoration tips due to an error.',
+      disclaimer: 'An error occurred during AI analysis.',
+    };
+  }
+}
+
+// --- ORIGINAL WILD FIND ANALYSIS FUNCTIONS (MULTI-STEP) ---
 
 async function getVisualAnalysis (fileObject) {
   if (!fileObject || !fileObject.buffer || !fileObject.mimetype) {
@@ -603,6 +684,9 @@ const deleteFromGcs = async (fileUrl, bucketName, storage) => {
 };
 
 module.exports = {
+  // Add the new function to the exports
+  getComprehensiveWildFindAnalysis,
+  // Keep all the old functions
   getVisualAnalysis,
   getFactualFeatures,
   getSynthesizedValuation,

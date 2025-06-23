@@ -2,7 +2,6 @@
 const express = require ('express');
 const router = express.Router ();
 const {protect} = require ('../middleware/authMiddleware');
-// Reminder: Corrected the case sensitivity here from 'wildFind' to 'WildFind'
 const WildFind = require ('../models/WildFind');
 
 /**
@@ -20,6 +19,36 @@ router.get ('/', protect, async (req, res) => {
   } catch (error) {
     console.error ('Error fetching wild finds:', error);
     res.status (500).json ({message: 'Server error while fetching finds.'});
+  }
+});
+
+/**
+ * @route   GET /api/wild-finds/:id
+ * @desc    Get a single saved 'Wild Find' by its ID
+ * @access  Private
+ */
+router.get ('/:id', protect, async (req, res) => {
+  try {
+    const find = await WildFind.findById (req.params.id);
+
+    if (!find) {
+      return res.status (404).json ({message: 'Find not found.'});
+    }
+
+    // Ensure the find belongs to the requesting user
+    if (find.userId.toString () !== req.user.id) {
+      // Return 404 to not reveal the existence of the resource to unauthorized users
+      return res.status (404).json ({message: 'Find not found.'});
+    }
+
+    res.status (200).json (find);
+  } catch (error) {
+    console.error ('Error fetching single wild find:', error);
+    // Handle cases like an invalid ObjectId format which would otherwise cause a server error
+    if (error.kind === 'ObjectId') {
+      return res.status (404).json ({message: 'Find not found.'});
+    }
+    res.status (500).json ({message: 'Server error while fetching find.'});
   }
 });
 
@@ -63,6 +92,35 @@ router.post ('/', protect, async (req, res) => {
   } catch (error) {
     console.error ('Error saving wild find:', error);
     res.status (500).json ({message: 'Server error while saving find.'});
+  }
+});
+
+/**
+ * @route   DELETE /api/wild-finds/:id
+ * @desc    Delete a saved 'Wild Find' by its ID
+ * @access  Private
+ */
+router.delete ('/:id', protect, async (req, res) => {
+  try {
+    const find = await WildFind.findById (req.params.id);
+
+    if (!find) {
+      return res.status (404).json ({message: 'Find not found.'});
+    }
+
+    // Ensure the find belongs to the requesting user
+    if (find.userId.toString () !== req.user.id) {
+      return res
+        .status (403)
+        .json ({message: 'User not authorized to delete this find.'});
+    }
+
+    await WildFind.deleteOne ({_id: req.params.id});
+
+    res.status (200).json ({message: 'Find deleted successfully.'});
+  } catch (error) {
+    console.error ('Error deleting wild find:', error);
+    res.status (500).json ({message: 'Server error while deleting find.'});
   }
 });
 

@@ -7,9 +7,10 @@ const {Readable} = require ('stream');
 const {protect} = require ('../middleware/authMiddleware');
 const AudioItem = require ('../models/AudioItem');
 const {
+  // Import the new comprehensive function
+  getComprehensiveWildFindAnalysis,
+  // Keep the functions that are still in use
   getVisualAnalysis,
-  getFactualFeatures,
-  getSynthesizedValuation,
   analyzeAdText,
   getAdPriceComparisonInsight,
   getAiValueInsight,
@@ -125,11 +126,9 @@ router.post (
       } = req.body;
 
       if (!make || !model || !itemType || !condition) {
-        return res
-          .status (400)
-          .json ({
-            message: 'Make, Model, Item Type, and Condition are required.',
-          });
+        return res.status (400).json ({
+          message: 'Make, Model, Item Type, and Condition are required.',
+        });
       }
 
       const newItemData = {
@@ -341,7 +340,7 @@ router.post (
   }
 );
 
-// Step 2: Detailed Analysis of user-confirmed/edited items for Wild Find
+// Step 2: Detailed Analysis - REWRITTEN TO USE THE NEW COMPREHENSIVE FUNCTION
 router.post ('/wild-find-detailed-analysis', protect, async (req, res) => {
   console.log ('--- HIT /api/items/wild-find-detailed-analysis ---');
   const {items} = req.body;
@@ -353,61 +352,48 @@ router.post ('/wild-find-detailed-analysis', protect, async (req, res) => {
     });
   }
 
-  console.log (
-    `Received ${items.length} item(s) for detailed analysis:`,
-    items
-  );
+  console.log (`Received ${items.length} item(s) for detailed analysis.`);
 
   try {
     const analysisPromises = items.map (async item => {
       if (!item.make || !item.model || !item.conditionDescription) {
-        console.log ('Skipping item with missing data:', item);
-        return null;
-      }
-
-      const unidentifiedMakes = ['unidentified make', 'unknown'];
-      const unidentifiedModels = ['model not clearly identifiable', 'unknown'];
-      if (
-        unidentifiedMakes.includes (item.make.toLowerCase ()) ||
-        unidentifiedModels.includes (item.model.toLowerCase ())
-      ) {
-        console.log (
-          `Skipping item with generic make/model: ${item.make} ${item.model}`
-        );
+        console.log ('Skipping item with missing base data:', item);
         return null;
       }
 
       console.log (
-        `Starting detailed analysis for: ${item.make} ${item.model}`
+        `Starting comprehensive analysis for: ${item.make} ${item.model}`
       );
-      const factualData = await getFactualFeatures (item.make, item.model);
-      const valuationData = await getSynthesizedValuation (item, factualData);
+      // A single call to our new, powerful function
+      const analysisResult = await getComprehensiveWildFindAnalysis (
+        item.make,
+        item.model,
+        item.conditionDescription
+      );
       console.log (
-        `Finished detailed analysis for: ${item.make} ${item.model}`
+        `Finished comprehensive analysis for: ${item.make} ${item.model}`
       );
 
-      return {
-        make: item.make,
-        model: item.model,
-        conditionDescription: item.conditionDescription,
-        ...factualData,
-        ...valuationData,
-      };
+      // The result from the new function is already in the final format we need.
+      return analysisResult;
     });
 
     const allAnalysesResults = await Promise.all (analysisPromises);
-    const allAnalyses = allAnalysesResults.filter (result => result !== null);
-
-    console.log (
-      `Successfully completed analysis for ${allAnalyses.length} item(s).`
+    const allAnalyses = allAnalysesResults.filter (
+      result => result !== null && !result.error
     );
 
     if (allAnalyses.length === 0) {
+      console.log ('No items could be successfully analyzed.');
       return res.status (400).json ({
         message: 'Could not perform detailed analysis on any of the provided items. Please ensure make and model are specific.',
         status: 'error',
       });
     }
+
+    console.log (
+      `Successfully completed analysis for ${allAnalyses.length} item(s).`
+    );
 
     res.status (200).json ({
       message: `Successfully performed detailed analysis on ${allAnalyses.length} item(s).`,

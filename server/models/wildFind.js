@@ -13,6 +13,7 @@ const WildFindSchema = new mongoose.Schema (
       required: true,
     },
     analysis: {
+      // --- Keep the original fields ---
       identifiedItem: {
         type: String,
         required: true,
@@ -24,6 +25,23 @@ const WildFindSchema = new mongoose.Schema (
       estimatedValue: {
         type: String,
         required: true,
+      },
+      // --- Add the new, comprehensive fields ---
+      detailedAnalysis: {
+        type: String,
+        default: '',
+      },
+      potentialIssues: {
+        type: String,
+        default: '',
+      },
+      restorationTips: {
+        type: String,
+        default: '',
+      },
+      disclaimer: {
+        type: String,
+        default: '',
       },
     },
   },
