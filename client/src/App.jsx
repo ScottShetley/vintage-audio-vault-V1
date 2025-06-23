@@ -15,6 +15,8 @@ import AdAnalyzerPage from './pages/AdAnalyzerPage';
 import LandingPage from './pages/LandingPage';
 import InstructionsPage from './pages/InstructionsPage';
 import MarketplacePage from './pages/MarketplacePage';
+// 1. Import the new SavedFindsPage component
+import SavedFindsPage from './pages/SavedFindsPage';
 
 // Your main CSS file which now includes Tailwind directives
 import './index.css';
@@ -49,6 +51,8 @@ function App() {
             <>
               <li><Link to="/dashboard" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Dashboard</Link></li>
               <li><Link to="/wild-find" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Wild Find</Link></li>
+              {/* 2. Add the new Link to the navigation bar */}
+              <li><Link to="/saved-finds" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Saved Finds</Link></li>
               <li><Link to="/ad-analyzer" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Ad Analyzer</Link></li>
               <li><Link to="/marketplace" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Marketplace</Link></li>
               <li><Link to="/instructions" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Instructions</Link></li>
@@ -79,7 +83,6 @@ function App() {
 
           {/* Protected Routes */}
           <Route element={<ProtectedRoute />}>
-            {/* The token prop is now passed to DashboardPage */}
             <Route path="/dashboard" element={<DashboardPage token={token} />} />
             <Route path="/add-item" element={<AddItemPage />} />
             <Route path="/item/:id" element={<DetailedItemView />} />
@@ -87,6 +90,8 @@ function App() {
             <Route path="/wild-find" element={<WildFindPage />} />
             <Route path="/ad-analyzer" element={<AdAnalyzerPage />} />
             <Route path="/marketplace" element={<MarketplacePage />} />
+            {/* 3. Add the new Route for the page */}
+            <Route path="/saved-finds" element={<SavedFindsPage />} />
           </Route>
 
           {/* Catch-all route for 404s */}
