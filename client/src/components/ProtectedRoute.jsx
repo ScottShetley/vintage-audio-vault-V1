@@ -3,11 +3,11 @@ import React from 'react';
 import {Navigate, Outlet} from 'react-router-dom';
 
 const ProtectedRoute = () => {
-  // Check if JWT token exists in localStorage
-  const isAuthenticated = localStorage.getItem ('token');
+  // *** THE FIX: Check for the correct 'authToken' key ***
+  const isAuthenticated = localStorage.getItem ('authToken');
 
-  // If authenticated, render the child routes (DashboardPage in this case)
-  // Otherwise, redirect to the login page
+  // If authenticated, render the child routes.
+  // Otherwise, redirect to the login page.
   return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
 };
 

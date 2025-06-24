@@ -199,7 +199,6 @@ function WildFindPage() {
     }
   };
 
-  // UPDATED to send the full analysis object
   const handleSaveFind = async (analysisToSave, index) => {
     const token = localStorage.getItem('authToken');
     if (!token || !savedImageUrl) {
@@ -211,8 +210,9 @@ function WildFindPage() {
     setSaveStatuses(prev => ({ ...prev, [index]: 'saving' }));
 
     try {
-        // The entire analysisToSave object now matches the schema we need.
+        // *** FIX: Added the missing findType to the payload ***
         const payload = {
+            findType: 'Wild Find',
             imageUrl: savedImageUrl,
             analysis: analysisToSave 
         };
@@ -294,7 +294,6 @@ function WildFindPage() {
         </>
       )}
       
-      {/* UPDATED to display the new, comprehensive analysis fields */}
       {currentStep === 'results' && finalAnalysisResult && finalAnalysisResult.status === 'success' && (
         <div className="space-y-8 mt-8">
             {finalAnalysisResult.analyses.map((analysis, index) => (

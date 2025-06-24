@@ -2,16 +2,12 @@
 const express = require ('express');
 const router = express.Router ();
 const {protect} = require ('../middleware/authMiddleware');
-const WildFind = require ('../models/WildFind');
+// *** THE FIX: Changed 'WildFind' to 'wildFind' to match the actual file name ***
+const WildFind = require ('../models/wildFind');
 
-/**
- * @route   GET /api/wild-finds
- * @desc    Get all saved 'Wild Finds' for the logged-in user
- * @access  Private
- */
+// GET all saved finds for the user
 router.get ('/', protect, async (req, res) => {
   try {
-    // req.user.id is available from the 'protect' middleware
     const finds = await WildFind.find ({userId: req.user.id}).sort ({
       createdAt: -1,
     });
@@ -22,29 +18,15 @@ router.get ('/', protect, async (req, res) => {
   }
 });
 
-/**
- * @route   GET /api/wild-finds/:id
- * @desc    Get a single saved 'Wild Find' by its ID
- * @access  Private
- */
+// GET a single saved find by its ID
 router.get ('/:id', protect, async (req, res) => {
   try {
     const find = await WildFind.findById (req.params.id);
-
-    if (!find) {
+    if (!find || find.userId.toString () !== req.user.id) {
       return res.status (404).json ({message: 'Find not found.'});
     }
-
-    // Ensure the find belongs to the requesting user
-    if (find.userId.toString () !== req.user.id) {
-      // Return 404 to not reveal the existence of the resource to unauthorized users
-      return res.status (404).json ({message: 'Find not found.'});
-    }
-
     res.status (200).json (find);
   } catch (error) {
-    console.error ('Error fetching single wild find:', error);
-    // Handle cases like an invalid ObjectId format which would otherwise cause a server error
     if (error.kind === 'ObjectId') {
       return res.status (404).json ({message: 'Find not found.'});
     }
@@ -52,71 +34,65 @@ router.get ('/:id', protect, async (req, res) => {
   }
 });
 
-/**
- * @route   POST /api/wild-finds
- * @desc    Save a new 'Wild Find' analysis
- * @access  Private
- */
+// POST a new find (handles both Wild Finds and Ad Analyses)
 router.post ('/', protect, async (req, res) => {
   try {
-    const {imageUrl, analysis} = req.body;
-
-    // Basic validation
-    if (!imageUrl || !analysis) {
-      return res
-        .status (400)
-        .json ({message: 'Missing imageUrl or analysis data.'});
-    }
-    if (
-      !analysis.identifiedItem ||
-      !analysis.visualCondition ||
-      !analysis.estimatedValue
-    ) {
-      return res
-        .status (400)
-        .json ({message: 'Analysis object is missing required fields.'});
-    }
-
-    const newFind = new WildFind ({
-      userId: req.user.id, // from protect middleware
+    const {
+      findType,
       imageUrl,
+      sourceUrl,
+      askingPrice,
       analysis,
-    });
+      adAnalysis,
+    } = req.body;
+    const userId = req.user.id;
 
+    if (!findType || !imageUrl) {
+      return res
+        .status (400)
+        .json ({message: 'findType and imageUrl are required.'});
+    }
+
+    let newFindData = {userId, findType, imageUrl};
+
+    if (findType === 'Wild Find') {
+      if (!analysis)
+        return res
+          .status (400)
+          .json ({message: 'Analysis object is required for Wild Find.'});
+      newFindData.analysis = analysis;
+    } else if (findType === 'Ad Analysis') {
+      if (!adAnalysis)
+        return res
+          .status (400)
+          .json ({message: 'Ad Analysis object is required for Ad Analysis.'});
+      newFindData.adAnalysis = adAnalysis;
+      newFindData.sourceUrl = sourceUrl;
+      newFindData.askingPrice = askingPrice;
+    } else {
+      return res.status (400).json ({message: 'Invalid findType specified.'});
+    }
+
+    const newFind = new WildFind (newFindData);
     const savedFind = await newFind.save ();
 
-    res.status (201).json ({
-      message: 'Find saved successfully!',
-      find: savedFind,
-    });
+    res
+      .status (201)
+      .json ({message: 'Find saved successfully!', find: savedFind});
   } catch (error) {
-    console.error ('Error saving wild find:', error);
+    console.error ('Error saving find:', error);
     res.status (500).json ({message: 'Server error while saving find.'});
   }
 });
 
-/**
- * @route   DELETE /api/wild-finds/:id
- * @desc    Delete a saved 'Wild Find' by its ID
- * @access  Private
- */
+// DELETE a saved find
 router.delete ('/:id', protect, async (req, res) => {
   try {
     const find = await WildFind.findById (req.params.id);
-
-    if (!find) {
+    if (!find || find.userId.toString () !== req.user.id) {
       return res.status (404).json ({message: 'Find not found.'});
     }
-
-    // Ensure the find belongs to the requesting user
-    if (find.userId.toString () !== req.user.id) {
-      return res
-        .status (403)
-        .json ({message: 'User not authorized to delete this find.'});
-    }
-
     await WildFind.deleteOne ({_id: req.params.id});
-
     res.status (200).json ({message: 'Find deleted successfully.'});
   } catch (error) {
     console.error ('Error deleting wild find:', error);

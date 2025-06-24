@@ -1,5 +1,5 @@
 // client/src/App.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useNavigate } from 'react-router-dom';
 
 // Import your page components
@@ -16,7 +16,6 @@ import LandingPage from './pages/LandingPage';
 import InstructionsPage from './pages/InstructionsPage';
 import MarketplacePage from './pages/MarketplacePage';
 import SavedFindsPage from './pages/SavedFindsPage';
-// 1. Import the new SavedFindDetailsPage component
 import SavedFindDetailsPage from './pages/SavedFindDetailsPage';
 
 
@@ -25,21 +24,32 @@ import './index.css';
 
 function App() {
   const [token, setToken] = useState(localStorage.getItem('authToken'));
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   
   const navigate = useNavigate();
-
-  useEffect(() => {
-    const storedToken = localStorage.getItem('authToken');
-    if (storedToken) {
-      setToken(storedToken);
-    }
-  }, []);
+  const dropdownRef = useRef(null);
 
   const handleLogout = () => {
     setToken(null);
     localStorage.removeItem('authToken');
+    setIsDropdownOpen(false);
     navigate('/');
   };
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    if (isDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isDropdownOpen]);
+
 
   return (
     <div className="min-h-screen bg-vav-background text-vav-text font-sans flex flex-col items-center p-5 box-border">
@@ -51,16 +61,27 @@ function App() {
           {token ? (
             // Logged IN Links
             <>
-              <li><Link to="/dashboard" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Dashboard</Link></li>
               <li><Link to="/wild-find" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Wild Find</Link></li>
+              {/* --- THE FIX: Reverted "Watchlist" back to "Saved Finds" --- */}
               <li><Link to="/saved-finds" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Saved Finds</Link></li>
               <li><Link to="/ad-analyzer" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Ad Analyzer</Link></li>
-              <li><Link to="/marketplace" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Marketplace</Link></li>
-              <li><Link to="/instructions" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Instructions</Link></li>
-              <li>
-                <button onClick={handleLogout} className="bg-vav-accent-primary hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition-colors">
-                  Logout
+              
+              <li className="relative" ref={dropdownRef}>
+                <button onClick={() => setIsDropdownOpen(!isDropdownOpen)} className="flex items-center gap-2 bg-vav-accent-primary hover:bg-vav-accent-secondary text-white font-bold py-2 px-4 rounded transition-colors">
+                  My Account
+                  <svg className={`w-4 h-4 transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                  </svg>
                 </button>
+                {isDropdownOpen && (
+                  <div className="absolute right-0 mt-2 w-48 bg-vav-content-card rounded-md shadow-lg py-1 z-10">
+                    <Link to="/dashboard" onClick={() => setIsDropdownOpen(false)} className="block px-4 py-2 text-sm text-vav-text hover:bg-vav-background-alt">Dashboard</Link>
+                    <Link to="/instructions" onClick={() => setIsDropdownOpen(false)} className="block px-4 py-2 text-sm text-vav-text hover:bg-vav-background-alt">Instructions</Link>
+                    <button onClick={handleLogout} className="w-full text-left block px-4 py-2 text-sm text-vav-text hover:bg-vav-background-alt">
+                      Logout
+                    </button>
+                  </div>
+                )}
               </li>
             </>
           ) : (
@@ -89,11 +110,10 @@ function App() {
             <Route path="/item/:id" element={<DetailedItemView />} />
             <Route path="/edit-item/:id" element={<EditItemPage />} />
             <Route path="/wild-find" element={<WildFindPage />} />
+            <Route path="/saved-finds" element={<SavedFindsPage />} />
+            <Route path="/wild-find-details/:id" element={<SavedFindDetailsPage />} />
             <Route path="/ad-analyzer" element={<AdAnalyzerPage />} />
             <Route path="/marketplace" element={<MarketplacePage />} />
-            <Route path="/saved-finds" element={<SavedFindsPage />} />
-            {/* 2. Add the new Route for the details page */}
-            <Route path="/wild-find-details/:id" element={<SavedFindDetailsPage />} />
           </Route>
 
           {/* Catch-all route for 404s */}

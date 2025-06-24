@@ -4,14 +4,84 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import FormattedAiDescription from '../components/FormattedAiDescription';
 
+// --- Sub-component for displaying Wild Find details ---
+const WildFindDetails = ({ find }) => (
+  <>
+    <div className="flex flex-col md:flex-row gap-8">
+      <div className="md:w-1/2">
+        <h2 className="text-3xl font-serif text-vav-accent-primary mb-4">{find.analysis.identifiedItem}</h2>
+        <img 
+          src={find.imageUrl} 
+          alt={find.analysis.identifiedItem}
+          className="w-full h-auto object-contain rounded-lg shadow-lg"
+        />
+      </div>
+      <div className="md:w-1/2 flex flex-col space-y-6">
+        <div className="bg-vav-content-card p-4 rounded-lg shadow-inner">
+          <h3 className="text-xl font-bold text-vav-accent-secondary border-b border-vav-accent-secondary pb-2 mb-3">Estimated Value</h3>
+          <p className="text-lg text-vav-text">{find.analysis.estimatedValue}</p>
+        </div>
+        <div className="bg-vav-content-card p-4 rounded-lg shadow-inner">
+          <h3 className="text-xl font-bold text-vav-accent-secondary border-b border-vav-accent-secondary pb-2 mb-3">Detailed Analysis</h3>
+          <FormattedAiDescription description={find.analysis.detailedAnalysis} />
+        </div>
+        <div className="bg-vav-content-card p-4 rounded-lg shadow-inner">
+          <h3 className="text-xl font-bold text-vav-accent-secondary border-b border-vav-accent-secondary pb-2 mb-3">Potential Issues</h3>
+          <FormattedAiDescription description={find.analysis.potentialIssues} />
+        </div>
+      </div>
+    </div>
+  </>
+);
+
+// --- Sub-component for displaying Ad Analysis details ---
+const AdAnalysisDetails = ({ find }) => (
+  <>
+    <div className="flex flex-col md:flex-row gap-8">
+      <div className="md:w-1/2">
+        <h2 className="text-3xl font-serif text-vav-accent-primary mb-4">
+            {find.adAnalysis.identifiedMake} {find.adAnalysis.identifiedModel}
+        </h2>
+        <img 
+          src={find.imageUrl} 
+          alt={`${find.adAnalysis.identifiedMake} ${find.adAnalysis.identifiedModel}`}
+          className="w-full h-auto object-contain rounded-lg shadow-lg mb-4"
+        />
+        {find.sourceUrl && (
+            <a href={find.sourceUrl} target="_blank" rel="noopener noreferrer" className="inline-block bg-vav-accent-secondary text-white font-semibold py-2 px-6 rounded-md shadow-md hover:bg-vav-accent-primary transition-colors">
+                View Original Ad &rarr;
+            </a>
+        )}
+      </div>
+      <div className="md:w-1/2 flex flex-col space-y-6">
+        <div className="p-4 bg-vav-content-card rounded-lg shadow-inner">
+          <h3 className="text-xl font-bold text-vav-accent-secondary border-b border-vav-accent-secondary pb-2 mb-3">Price Insight</h3>
+          <p className="text-vav-text"><strong>Seller's Asking Price:</strong> <span className="font-bold text-2xl">${parseFloat(find.askingPrice).toFixed(2)}</span></p>
+          <p className="text-vav-text"><strong>AI Estimated Value:</strong> <span className="font-bold text-2xl">{find.adAnalysis.valueInsight?.estimatedValueUSD || 'N/A'}</span></p>
+          <div className="mt-3"><FormattedAiDescription description={find.adAnalysis.priceComparison?.insight} /></div>
+        </div>
+        
+        {/* *** DEBUGGING SECTION *** */}
+        <div className="p-4 bg-vav-content-card rounded-lg shadow-inner">
+          <h3 className="text-xl font-bold text-vav-accent-secondary border-b border-vav-accent-secondary pb-2 mb-3">Summary of Seller's Ad (Debug View)</h3>
+          <pre className="whitespace-pre-wrap bg-gray-900 text-white p-2 rounded-md text-xs font-mono">
+            {`Value: "${find.adAnalysis.textAnalysis?.sellerConditionSummary}"`}
+          </pre>
+        </div>
+        {/* *** END DEBUGGING SECTION *** */}
+
+      </div>
+    </div>
+  </>
+);
+
+
 const SavedFindDetailsPage = () => {
   const [find, setFind] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const { id } = useParams();
   const navigate = useNavigate();
-
-  // New state for handling delete operation
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
 
@@ -28,15 +98,12 @@ const SavedFindDetailsPage = () => {
       }
 
       try {
-        const response = await axios.get(`/api/wild-finds/${id}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+        const response = await axios.get(`http://localhost:5000/api/wild-finds/${id}`, {
+          headers: { Authorization: `Bearer ${token}` },
         });
         setFind(response.data);
       } catch (err) {
-        console.error('Error fetching find details:', err);
-        setError(err.response?.data?.message || 'Failed to load the details for this find.');
+        setError(err.response?.data?.message || 'Failed to load find details.');
       } finally {
         setLoading(false);
       }
@@ -46,99 +113,34 @@ const SavedFindDetailsPage = () => {
   }, [id]);
 
   const handleDelete = async () => {
-    // 1. Confirm with the user
     if (!window.confirm('Are you sure you want to permanently delete this find?')) {
       return;
     }
-
     setIsDeleting(true);
     setDeleteError(null);
     const token = localStorage.getItem('authToken');
 
     try {
-      // 2. Make the API call
       await axios.delete(`/api/wild-finds/${id}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
-      // 3. Redirect on success
       navigate('/saved-finds');
     } catch (err) {
-      console.error('Error deleting find:', err);
-      setDeleteError(err.response?.data?.message || 'Failed to delete the find. Please try again.');
+      setDeleteError(err.response?.data?.message || 'Failed to delete find.');
       setIsDeleting(false);
     }
   };
 
   const renderContent = () => {
-    if (loading) {
-      return (
-        <div className="flex justify-center items-center h-64">
-          <svg className="animate-spin h-10 w-10 text-vav-accent-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          <p className="ml-3 text-lg">Loading Details...</p>
-        </div>
-      );
+    if (loading) return <div className="text-center p-8">Loading Details...</div>;
+    if (error) return <div className="text-center p-8 text-red-500">{error}</div>;
+    if (!find) return null;
+
+    if (find.findType === 'Ad Analysis') {
+        return <AdAnalysisDetails find={find} />;
+    } else {
+        return <WildFindDetails find={find} />;
     }
-
-    if (error) {
-      return (
-        <div className="text-center p-4 bg-red-900 bg-opacity-30 rounded-md">
-          <p className="text-red-400 text-lg">{error}</p>
-        </div>
-      );
-    }
-
-    if (!find) {
-      return null;
-    }
-
-    return (
-      <>
-        <div className="flex flex-col md:flex-row gap-8">
-          {/* Image Column */}
-          <div className="md:w-1/2">
-            <h2 className="text-3xl font-serif text-vav-accent-primary mb-4">{find.analysis.identifiedItem}</h2>
-            <img 
-              src={find.imageUrl} 
-              alt={find.analysis.identifiedItem}
-              className="w-full h-auto object-contain rounded-lg shadow-lg"
-            />
-          </div>
-
-          {/* Details Column */}
-          <div className="md:w-1/2 flex flex-col space-y-6">
-            <div className="bg-vav-content-card p-4 rounded-lg shadow-inner">
-              <h3 className="text-xl font-bold text-vav-accent-secondary border-b border-vav-accent-secondary pb-2 mb-3">Estimated Value</h3>
-              <p className="text-lg text-vav-text">{find.analysis.estimatedValue}</p>
-            </div>
-            
-            <div className="bg-vav-content-card p-4 rounded-lg shadow-inner">
-              <h3 className="text-xl font-bold text-vav-accent-secondary border-b border-vav-accent-secondary pb-2 mb-3">Visual Condition</h3>
-              <FormattedAiDescription text={find.analysis.visualCondition} />
-            </div>
-
-            <div className="bg-vav-content-card p-4 rounded-lg shadow-inner">
-              <h3 className="text-xl font-bold text-vav-accent-secondary border-b border-vav-accent-secondary pb-2 mb-3">Detailed Analysis</h3>
-              <FormattedAiDescription text={find.analysis.detailedAnalysis} />
-            </div>
-            
-            <div className="bg-vav-content-card p-4 rounded-lg shadow-inner">
-              <h3 className="text-xl font-bold text-vav-accent-secondary border-b border-vav-accent-secondary pb-2 mb-3">Potential Issues</h3>
-              <FormattedAiDescription text={find.analysis.potentialIssues} />
-            </div>
-
-            <div className="bg-vav-content-card p-4 rounded-lg shadow-inner">
-              <h3 className="text-xl font-bold text-vav-accent-secondary border-b border-vav-accent-secondary pb-2 mb-3">Restoration & Repair Tips</h3>
-              <FormattedAiDescription text={find.analysis.restorationTips} />
-            </div>
-          </div>
-        </div>
-      </>
-    );
   };
 
   return (
@@ -147,8 +149,6 @@ const SavedFindDetailsPage = () => {
         <Link to="/saved-finds" className="text-vav-accent-primary hover:underline">
           &larr; Back to My Saved Finds
         </Link>
-        
-        {/* Delete Button and Error Display */}
         <div className="flex items-center gap-4">
             {deleteError && <p className="text-red-400">{deleteError}</p>}
             <button 

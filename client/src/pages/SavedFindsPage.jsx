@@ -21,7 +21,7 @@ const SavedFindsPage = () => {
       }
 
       try {
-        const response = await axios.get('/api/wild-finds', {
+        const response = await axios.get('http://localhost:5000/api/wild-finds', {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -36,7 +36,17 @@ const SavedFindsPage = () => {
     };
 
     fetchSavedFinds();
-  }, []); // Empty dependency array ensures this runs once on mount
+  }, []);
+
+  const getFindTitle = (find) => {
+    if (find.findType === 'Ad Analysis' && find.adAnalysis) {
+        return `${find.adAnalysis.identifiedMake} ${find.adAnalysis.identifiedModel}`;
+    }
+    if (find.findType === 'Wild Find' && find.analysis) {
+        return find.analysis.identifiedItem;
+    }
+    return 'Unknown Item';
+  };
 
   return (
     <div className="w-full max-w-6xl mx-auto p-4">
@@ -44,41 +54,42 @@ const SavedFindsPage = () => {
         <h1 className="text-4xl font-serif text-vav-accent-primary">My Saved Finds</h1>
       </div>
 
-      {loading && (
-        <div className="flex justify-center items-center h-48">
-          <svg className="animate-spin h-10 w-10 text-vav-accent-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          <p className="ml-3 text-lg">Loading your finds...</p>
-        </div>
-      )}
-
-      {error && (
-        <div className="text-center p-4 bg-red-900 bg-opacity-30 rounded-md">
-          <p className="text-red-400 text-lg">{error}</p>
-        </div>
-      )}
+      {loading && <div className="text-center text-lg">Loading your finds...</div>}
+      {error && <div className="text-center text-red-400 text-lg p-4 bg-red-900 bg-opacity-30 rounded-md">{error}</div>}
 
       {!loading && !error && finds.length === 0 && (
         <div className="text-center mt-8 p-6 bg-vav-content-card rounded-lg shadow-md">
-          <p className="text-vav-text text-lg">You haven't saved any "Wild Finds" yet.</p>
+          <p className="text-vav-text text-lg">You haven't saved any finds yet.</p>
         </div>
       )}
 
       {!loading && !error && finds.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {finds.map((find) => (
-            <Link to={`/wild-find-details/${find._id}`} key={find._id} className="bg-vav-content-card p-4 rounded-lg shadow-md flex flex-col items-center text-center space-y-2 transition-transform duration-300 hover:scale-105">
-              <img
-                src={find.imageUrl}
-                alt={find.analysis.identifiedItem}
-                className="w-full h-48 object-cover rounded-md mb-2"
-              />
-              <h3 className="font-serif text-vav-accent-primary text-lg font-bold">
-                {find.analysis.identifiedItem}
-              </h3>
-            </Link>
+            <div key={find._id} className="bg-vav-content-card rounded-lg shadow-md flex flex-col transition-transform duration-300 hover:scale-105 relative">
+              <div className={`absolute top-2 right-2 text-xs font-bold px-2 py-1 rounded-full text-white ${find.findType === 'Ad Analysis' ? 'bg-blue-600' : 'bg-green-600'}`}>
+                {find.findType}
+              </div>
+
+              <Link to={`/wild-find-details/${find._id}`} className="flex flex-col h-full p-4">
+                <img
+                  src={find.imageUrl}
+                  alt={getFindTitle(find)}
+                  className="w-full h-48 object-cover rounded-md mb-4"
+                />
+                <h3 className="font-serif text-vav-accent-primary text-lg font-bold text-center">
+                  {getFindTitle(find)}
+                </h3>
+              </Link>
+              
+              {find.findType === 'Ad Analysis' && find.sourceUrl && (
+                  <div className="p-4 border-t border-vav-background-alt mt-auto">
+                    <a href={find.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-vav-accent-secondary hover:text-vav-accent-primary font-semibold text-center block">
+                        View Original Ad &rarr;
+                    </a>
+                  </div>
+              )}
+            </div>
           ))}
         </div>
       )}

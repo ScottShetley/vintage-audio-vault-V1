@@ -3,13 +3,10 @@ console.log ('--- audioItemRoutes.js module is being loaded ---');
 
 const express = require ('express');
 const multer = require ('multer');
-const {Readable} = require ('stream');
 const {protect} = require ('../middleware/authMiddleware');
 const AudioItem = require ('../models/AudioItem');
 const {
-  // Import the new comprehensive function
   getComprehensiveWildFindAnalysis,
-  // Keep the functions that are still in use
   getVisualAnalysis,
   analyzeAdText,
   getAdPriceComparisonInsight,
@@ -21,404 +18,292 @@ const {
 
 const router = express.Router ();
 
-// Multer configurations
-const upload = multer ({
-  storage: multer.memoryStorage (),
-  limits: {fileSize: 5 * 1024 * 1024},
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith ('image/')) {
-      cb (null, true);
-    } else {
-      cb (new Error ('Not an image! Please upload an image file.'), false);
-    }
-  },
-});
+// --- Multer Configurations ---
 const uploadMultiple = multer ({
   storage: multer.memoryStorage (),
   limits: {fileSize: 5 * 1024 * 1024},
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith ('image/')) {
-      cb (null, true);
-    } else {
-      cb (new Error ('Not an image! Please upload an image file.'), false);
-    }
-  },
-});
+}).array ('photos', 5);
+
+const uploadSingle = multer ({
+  storage: multer.memoryStorage (),
+  limits: {fileSize: 5 * 1024 * 1024},
+}).single ('photo');
+
 const uploadForAnalysis = multer ({
   storage: multer.memoryStorage (),
   limits: {fileSize: 10 * 1024 * 1024},
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith ('image/')) {
-      cb (null, true);
-    } else {
-      cb (new Error ('Not an image! Please upload an image file.'), false);
-    }
-  },
-});
+}).single ('adImage');
 
-// GCS Middleware
-const uploadSingleToGcs = (req, res, next) => {
-  if (!req.file) {
+// *** FIX: Corrected multer instance for the Wild Find feature ***
+// The field name is now 'image' to match WildFindPage.jsx
+const uploadWildFind = multer ({
+  storage: multer.memoryStorage (),
+  limits: {fileSize: 10 * 1024 * 1024},
+}).single ('image'); 
+
+// --- GCS Middleware ---
+const uploadToGcsMiddleware = async (req, res, next) => {
+  if (!req.files && !req.file) {
     return next ();
   }
+
   const gcs = req.app.locals.gcs;
   if (!gcs || !gcs.bucketName) {
-    console.error (
-      'GCS not initialized or bucketName missing in uploadSingleToGcs'
-    );
     return next (new Error ('GCS configuration error.'));
   }
-  uploadToGcs (req.file, gcs.bucketName, gcs.storage)
-    .then (gcsUrl => {
-      req.file.gcsUrl = gcsUrl;
-      next ();
-    })
-    .catch (error => {
-      console.error ('Error in uploadSingleToGcs middleware:', error);
-      next (error);
-    });
-};
-const uploadMultipleToGcs = async (req, res, next) => {
-  if (!req.files || req.files.length === 0) {
-    return next ();
-  }
-  const gcs = req.app.locals.gcs;
-  if (!gcs || !gcs.bucketName) {
-    console.error (
-      'GCS not initialized or bucketName missing in uploadMultipleToGcs'
-    );
-    return next (new Error ('GCS configuration error.'));
-  }
+
   try {
-    const uploadPromises = req.files.map (file =>
-      uploadToGcs (file, gcs.bucketName, gcs.storage)
-    );
-    const gcsUrls = await Promise.all (uploadPromises);
-    req.gcsUrls = gcsUrls;
-    next ();
-  } catch (error) {
-    console.error ('Error in uploadMultipleToGcs middleware:', error);
-    next (error);
-  }
-};
-
-// --- CRUD Operations for Audio Items ---
-router.post (
-  '/',
-  protect,
-  upload.single ('photo'),
-  uploadSingleToGcs,
-  async (req, res) => {
-    try {
-      const {
-        make,
-        model,
-        itemType,
-        condition,
-        isFullyFunctional,
-        issuesDescription,
-        specifications,
-        notes,
-        purchaseDate,
-        purchasePrice,
-        userEstimatedValue,
-        userEstimatedValueDate,
-      } = req.body;
-
-      if (!make || !model || !itemType || !condition) {
-        return res.status (400).json ({
-          message: 'Make, Model, Item Type, and Condition are required.',
-        });
-      }
-
-      const newItemData = {
-        user: req.user.id,
-        make,
-        model,
-        itemType,
-        condition,
-        isFullyFunctional: String (isFullyFunctional).toLowerCase () === 'true',
-        issuesDescription: issuesDescription || '',
-        specifications: specifications || '',
-        notes: notes || '',
-        purchaseDate: purchaseDate || null,
-        purchasePrice: purchasePrice ? Number (purchasePrice) : null,
-        userEstimatedValue: userEstimatedValue
-          ? Number (userEstimatedValue)
-          : null,
-        userEstimatedValueDate: userEstimatedValueDate || null,
-        photoUrls: req.file && req.file.gcsUrl ? [req.file.gcsUrl] : [],
-      };
-      const audioItem = new AudioItem (newItemData);
-      await audioItem.save ();
-      res.status (201).json (audioItem);
-    } catch (error) {
-      console.error ('Error creating audio item:', error);
-      if (error.name === 'ValidationError') {
-        return res
-          .status (400)
-          .json ({message: 'Validation Error', errors: error.errors});
-      }
-      res.status (500).json ({message: 'Server error while creating item.'});
-    }
-  }
-);
-
-router.get ('/', protect, async (req, res) => {
-  try {
-    const items = await AudioItem.find ({user: req.user.id}).sort ({
-      createdAt: -1,
-    });
-    res.json (items);
-  } catch (error) {
-    console.error ('Error fetching items:', error);
-    res.status (500).json ({message: 'Server error while fetching items.'});
-  }
-});
-
-router.get ('/:id', protect, async (req, res) => {
-  try {
-    const item = await AudioItem.findById (req.params.id);
-    if (!item) {
-      return res.status (404).json ({message: 'Item not found'});
-    }
-    if (item.user.toString () !== req.user.id) {
-      return res.status (401).json ({message: 'User not authorized'});
-    }
-    res.json (item);
-  } catch (error) {
-    console.error ('Error fetching item by ID:', error);
-    if (error.kind === 'ObjectId') {
-      return res
-        .status (404)
-        .json ({message: 'Item not found (invalid ID format)'});
-    }
-    res
-      .status (500)
-      .json ({message: 'Server error while fetching item by ID.'});
-  }
-});
-
-router.put (
-  '/:id',
-  protect,
-  uploadMultiple.array ('photos', 5),
-  uploadMultipleToGcs,
-  async (req, res) => {
-    try {
-      const item = await AudioItem.findById (req.params.id);
-      if (!item) {
-        return res.status (404).json ({message: 'Item not found'});
-      }
-      if (item.user.toString () !== req.user.id) {
-        return res.status (401).json ({message: 'User not authorized'});
-      }
-
-      const updateFields = {...req.body};
-
-      if (updateFields.hasOwnProperty ('isFullyFunctional')) {
-        updateFields.isFullyFunctional =
-          String (updateFields.isFullyFunctional).toLowerCase () === 'true';
-      }
-      if (updateFields.hasOwnProperty ('isForSale')) {
-        updateFields.isForSale =
-          String (updateFields.isForSale).toLowerCase () === 'true';
-      }
-      // ... (rest of the PUT logic is unchanged)
-
-      const updatedItem = await AudioItem.findByIdAndUpdate (
-        req.params.id,
-        {$set: updateFields},
-        {new: true, runValidators: true}
+    if (req.files && req.files.length > 0) {
+      const uploadPromises = req.files.map (file =>
+        uploadToGcs (file, gcs.bucketName, gcs.storage)
       );
-      res.json (updatedItem);
-    } catch (error) {
-      console.error ('Error updating item:', error);
-      // ... (error handling is unchanged)
-    }
-  }
-);
-
-router.delete ('/:id', protect, async (req, res) => {
-  try {
-    const item = await AudioItem.findById (req.params.id);
-    if (!item) {
-      return res.status (404).json ({message: 'Item not found'});
-    }
-    if (item.user.toString () !== req.user.id) {
-      return res.status (401).json ({message: 'User not authorized'});
-    }
-
-    const gcs = req.app.locals.gcs;
-    if (item.photoUrls && item.photoUrls.length > 0 && gcs && gcs.bucketName) {
-      const deletePromises = item.photoUrls.map (url =>
-        deleteFromGcs (url, gcs.bucketName, gcs.storage).catch (err => {
-          console.error (`Failed to delete GCS image ${url}:`, err);
-        })
-      );
-      await Promise.all (deletePromises);
-    }
-
-    await AudioItem.findByIdAndDelete (req.params.id);
-    res.json ({message: 'Item removed successfully'});
-  } catch (error) {
-    console.error ('Error deleting item:', error);
-    // ... (error handling is unchanged)
-  }
-});
-
-router.patch ('/:id/ai-evaluation', protect, async (req, res) => {
-  try {
-    const item = await AudioItem.findById (req.params.id);
-    if (!item) return res.status (404).json ({message: 'Item not found'});
-    // ... (rest of the PATCH logic is unchanged)
-
-    const updatedItem = await item.save ();
-    res.json (updatedItem);
-  } catch (error) {
-    console.error ('Error in AI evaluation and suggestion process:', error);
-    // ... (error handling is unchanged)
-  }
-});
-
-// --- WILD FIND ROUTES (TWO-STEP PROCESS) ---
-
-// Step 1: Initial Scan of the uploaded image for Wild Find
-router.post (
-  '/wild-find-initial-scan',
-  protect,
-  uploadForAnalysis.single ('image'),
-  async (req, res) => {
-    console.log ('--- HIT /api/items/wild-find-initial-scan ---');
-    if (!req.file) {
-      return res
-        .status (400)
-        .json ({message: 'No image file uploaded.', status: 'error'});
-    }
-    try {
-      const gcs = req.app.locals.gcs;
-      if (!gcs || !gcs.bucketName || !gcs.storage) {
-        console.error ('GCS is not configured on the server.');
-        throw new Error ('GCS configuration is missing.');
-      }
-      console.log ('Uploading Wild Find image to GCS...');
-      const imageUrl = await uploadToGcs (
+      req.gcsUrls = await Promise.all (uploadPromises);
+    } else if (req.file) {
+      req.gcsUrl = await uploadToGcs (
         req.file,
         gcs.bucketName,
         gcs.storage
       );
-      console.log (`Image uploaded successfully. URL: ${imageUrl}`);
-
-      console.log ('Performing initial visual analysis for Wild Find...');
-      const visualDataArray = await getVisualAnalysis (req.file);
-
-      if (!visualDataArray || visualDataArray.length === 0) {
-        return res.status (404).json ({
-          message: 'The AI could not identify any distinct items in the image. Please try a clearer photo or a different angle.',
-          status: 'error',
-          scannedItems: [],
-        });
-      }
-
-      console.log (
-        `Initial scan found ${visualDataArray.length} potential item(s).`
-      );
-      res.status (200).json ({
-        message: `Successfully scanned image. Found ${visualDataArray.length} potential item(s).`,
-        status: 'success',
-        scannedItems: visualDataArray,
-        imageUrl: imageUrl,
-      });
-    } catch (error) {
-      console.error ('Error during Wild Find initial scan:', error);
-      res.status (500).json ({
-        message: 'An error occurred during the AI initial scan process.',
-        status: 'error',
-        errorDetails: error.message,
-      });
     }
-  }
-);
-
-// Step 2: Detailed Analysis - REWRITTEN TO USE THE NEW COMPREHENSIVE FUNCTION
-router.post ('/wild-find-detailed-analysis', protect, async (req, res) => {
-  console.log ('--- HIT /api/items/wild-find-detailed-analysis ---');
-  const {items} = req.body;
-
-  if (!items || !Array.isArray (items) || items.length === 0) {
-    return res.status (400).json ({
-      message: 'No items provided for detailed analysis.',
-      status: 'error',
-    });
-  }
-
-  console.log (`Received ${items.length} item(s) for detailed analysis.`);
-
-  try {
-    const analysisPromises = items.map (async item => {
-      if (!item.make || !item.model || !item.conditionDescription) {
-        console.log ('Skipping item with missing base data:', item);
-        return null;
-      }
-
-      console.log (
-        `Starting comprehensive analysis for: ${item.make} ${item.model}`
-      );
-      // A single call to our new, powerful function
-      const analysisResult = await getComprehensiveWildFindAnalysis (
-        item.make,
-        item.model,
-        item.conditionDescription
-      );
-      console.log (
-        `Finished comprehensive analysis for: ${item.make} ${item.model}`
-      );
-
-      // The result from the new function is already in the final format we need.
-      return analysisResult;
-    });
-
-    const allAnalysesResults = await Promise.all (analysisPromises);
-    const allAnalyses = allAnalysesResults.filter (
-      result => result !== null && !result.error
-    );
-
-    if (allAnalyses.length === 0) {
-      console.log ('No items could be successfully analyzed.');
-      return res.status (400).json ({
-        message: 'Could not perform detailed analysis on any of the provided items. Please ensure make and model are specific.',
-        status: 'error',
-      });
-    }
-
-    console.log (
-      `Successfully completed analysis for ${allAnalyses.length} item(s).`
-    );
-
-    res.status (200).json ({
-      message: `Successfully performed detailed analysis on ${allAnalyses.length} item(s).`,
-      status: 'success',
-      analyses: allAnalyses,
-    });
+    next ();
   } catch (error) {
-    console.error ('CRITICAL ERROR during Wild Find detailed analysis:', error);
-    res.status (500).json ({
-      message: 'An error occurred during the AI detailed analysis process.',
-      status: 'error',
-      errorDetails: error.message,
-    });
+    next (error);
+  }
+};
+
+// --- Main Audio Item CRUD Routes ---
+
+// GET /api/items - Get all items for a user
+router.get ('/', protect, async (req, res) => {
+  try {
+    const items = await AudioItem.find ({user: req.user.id}).sort ({createdAt: -1});
+    res.json (items);
+  } catch (error) {
+    res.status (500).json ({message: 'Server error while fetching items.'});
   }
 });
 
-// --- NEW AD ANALYZER ROUTE ---
-router.post (
-  '/analyze-ad-listing',
-  protect,
-  uploadForAnalysis.single ('adImage'),
-  async (req, res) => {
-    // This entire route is unchanged and correct.
-    // ...
+// GET /api/items/:id - Get a single item by ID
+router.get ('/:id', protect, async (req, res) => {
+  try {
+    const item = await AudioItem.findById (req.params.id);
+    if (!item || item.user.toString () !== req.user.id) {
+      return res.status (404).json ({message: 'Item not found'});
+    }
+    res.json (item);
+  } catch (error) {
+    if (error.kind === 'ObjectId') {
+      return res.status (404).json ({message: 'Item not found'});
+    }
+    res.status (500).json ({message: 'Server error while fetching item by ID.'});
   }
-);
+});
+
+// POST /api/items - Create a new item
+router.post ('/', protect, uploadSingle, uploadToGcsMiddleware, async (req, res) => {
+  try {
+    const newItemData = {
+      user: req.user.id,
+      ...req.body,
+      isFullyFunctional: String (req.body.isFullyFunctional).toLowerCase () === 'true',
+      photoUrls: req.gcsUrl ? [req.gcsUrl] : [],
+    };
+    const audioItem = new AudioItem (newItemData);
+    await audioItem.save ();
+    res.status (201).json (audioItem);
+  } catch (error) {
+    res.status (500).json ({message: 'Server error while creating item.'});
+  }
+});
+
+// PUT /api/items/:id - Update an existing item
+router.put ('/:id', protect, uploadMultiple, uploadToGcsMiddleware, async (req, res) => {
+    try {
+        const item = await AudioItem.findById(req.params.id);
+        if (!item || item.user.toString() !== req.user.id) {
+            return res.status(404).json({ message: 'Item not found' });
+        }
+
+        const updateFields = { ...req.body };
+        
+        let existingImageUrls = [];
+        if (req.body.existingImageUrls) {
+            try {
+                const parsed = JSON.parse(req.body.existingImageUrls);
+                existingImageUrls = Array.isArray(parsed) ? parsed : [parsed];
+            } catch {
+                existingImageUrls = Array.isArray(req.body.existingImageUrls) ? req.body.existingImageUrls : [req.body.existingImageUrls];
+            }
+        }
+        
+        const newImageUrls = req.gcsUrls || [];
+        updateFields.photoUrls = [...existingImageUrls, ...newImageUrls];
+        delete updateFields.existingImageUrls;
+
+        if (updateFields.hasOwnProperty('isFullyFunctional')) {
+            updateFields.isFullyFunctional = String(updateFields.isFullyFunctional).toLowerCase() === 'true';
+        }
+
+        const updatedItem = await AudioItem.findByIdAndUpdate(
+            req.params.id,
+            { $set: updateFields },
+            { new: true, runValidators: true }
+        );
+        res.json(updatedItem);
+    } catch (error) {
+        res.status(500).json({ message: 'Server error while updating item.' });
+    }
+});
+
+
+// DELETE /api/items/:id - Delete an item
+router.delete ('/:id', protect, async (req, res) => {
+  try {
+    const item = await AudioItem.findById (req.params.id);
+    if (!item || item.user.toString () !== req.user.id) {
+      return res.status (404).json ({message: 'Item not found'});
+    }
+    const gcs = req.app.locals.gcs;
+    if (item.photoUrls && item.photoUrls.length > 0 && gcs && gcs.bucketName) {
+      await Promise.all(
+        item.photoUrls.map (url =>
+          deleteFromGcs (url, gcs.bucketName, gcs.storage)
+        )
+      );
+    }
+    await AudioItem.findByIdAndDelete (req.params.id);
+    res.json ({message: 'Item removed successfully'});
+  } catch (error) {
+    res.status (500).json ({message: 'Server error while deleting item.'});
+  }
+});
+
+// --- AI Feature Routes ---
+
+// *** FIX: This route now only performs the initial visual scan and returns data in the structure the frontend expects ***
+router.post('/wild-find-initial-scan', protect, uploadWildFind, uploadToGcsMiddleware, async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ message: 'No image was uploaded for the Wild Find scan.' });
+  }
+
+  try {
+    // Step 1: Get the initial identification from the image.
+    const visualAnalysisArray = await getVisualAnalysis(req.file);
+
+    if (!visualAnalysisArray || visualAnalysisArray.length === 0) {
+      return res.status(404).json({ message: 'AI could not identify any item from the image.' });
+    }
+    
+    // Step 2: Return the response in the multi-step format expected by WildFindPage.jsx
+    res.status(200).json({
+        status: 'success',
+        imageUrl: req.gcsUrl, // The URL of the uploaded image from GCS
+        scannedItems: visualAnalysisArray, // The array of items found
+    });
+
+  } catch (error) {
+    console.error('Error during wild find initial scan:', error);
+    res.status(500).json({ message: 'An error occurred during the AI Wild Find scan.', details: error.message });
+  }
+});
+
+// *** NEW: The missing route for getting detailed analysis after user confirmation ***
+router.post('/wild-find-detailed-analysis', protect, async (req, res) => {
+  const { items } = req.body; // Expects an array of items with make, model, condition
+
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ status: 'error', message: 'No items provided for detailed analysis.' });
+  }
+
+  try {
+    const analysisPromises = items.map(item => 
+      getComprehensiveWildFindAnalysis(item.make, item.model, item.conditionDescription)
+    );
+    
+    const analyses = await Promise.all(analysisPromises);
+
+    res.status(200).json({
+      status: 'success',
+      analyses: analyses, // Send back an array of full analysis objects
+    });
+
+  } catch (error) {
+      console.error('Error during wild find detailed analysis:', error);
+      res.status(500).json({ status: 'error', message: 'An error occurred during the detailed AI analysis.', details: error.message });
+  }
+});
+
+
+// POST /api/items/analyze-ad-listing - The Ad Analyzer Route
+router.post('/analyze-ad-listing', protect, uploadForAnalysis, uploadToGcsMiddleware, async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ message: 'No ad image was uploaded.' });
+  }
+  const { adTitle, adDescription, askingPrice } = req.body;
+
+  try {
+    const textAnalysis = await analyzeAdText(adTitle, adDescription);
+    const visualAnalysisArray = await getVisualAnalysis(req.file);
+
+    if (!visualAnalysisArray || visualAnalysisArray.length === 0) {
+        return res.status(404).json({ message: 'AI could not identify the item from the image.' });
+    }
+    const visualAnalysis = visualAnalysisArray[0];
+
+    const identifiedMake = visualAnalysis.make !== "Unidentified Make" ? visualAnalysis.make : textAnalysis.extractedMake;
+    const identifiedModel = visualAnalysis.model !== "Model Not Clearly Identifiable" ? visualAnalysis.model : textAnalysis.extractedModel;
+
+    const valueInsight = await getAiValueInsight(identifiedMake, identifiedModel, visualAnalysis.conditionDescription);
+    const priceComparison = await getAdPriceComparisonInsight(
+        valueInsight.estimatedValueUSD,
+        askingPrice,
+        identifiedMake,
+        identifiedModel,
+        visualAnalysis.conditionDescription,
+        textAnalysis
+    );
+    
+    // This is the complete report we send to the frontend.
+    const finalReport = {
+        gcsUrl: req.gcsUrl, 
+        identifiedMake,
+        identifiedModel,
+        visualAnalysis,
+        textAnalysis,
+        valueInsight,
+        priceComparison,
+        askingPrice,
+    };
+
+    res.status(200).json(finalReport);
+
+  } catch (error) {
+    res.status(500).json({ message: 'An error occurred during the AI ad analysis.', details: error.message });
+  }
+});
+
+// PATCH /api/items/:id/ai-evaluation - Get AI insights for an existing item
+router.patch ('/:id/ai-evaluation', protect, async (req, res) => {
+  try {
+    const item = await AudioItem.findById (req.params.id);
+    if (!item || item.user.toString () !== req.user.id) {
+      return res.status (404).json ({message: 'Item not found'});
+    }
+
+    const [valueInsight, gearSuggestions] = await Promise.all ([
+      getAiValueInsight (item.make, item.model, item.condition, item.photoUrls),
+      getRelatedGearSuggestions (item.make, item.model, item.itemType, item.photoUrls),
+    ]);
+
+    item.aiValueInsight = valueInsight;
+    item.aiSuggestedGear = gearSuggestions;
+    item.aiEvaluatedOn = new Date ();
+
+    const updatedItem = await item.save ();
+    res.json (updatedItem);
+  } catch (error) {
+    res.status (500).json ({message: 'Server error during AI evaluation.'});
+  }
+});
 
 module.exports = router;

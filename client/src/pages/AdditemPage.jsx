@@ -13,13 +13,8 @@ const AddItemPage = () => {
   const [condition, setCondition] = useState('Mint'); // Default to first option
   const [isFullyFunctional, setIsFullyFunctional] = useState(true);
   const [issuesDescription, setIssuesDescription] = useState('');
-  const [specifications, setSpecifications] = useState('');
   const [notes, setNotes] = useState('');
-  const [purchaseDate, setPurchaseDate] = useState('');
-  const [purchasePrice, setPurchasePrice] = useState('');
-  const [userEstimatedValue, setUserEstimatedValue] = useState('');
-  const [userEstimatedValueDate, setUserEstimatedValueDate] = useState('');
-  const [photo, setPhoto] = useState(null); // Changed to store a single File object
+  const [photo, setPhoto] = useState(null);
 
   // UI states
   const [loading, setLoading] = useState(false);
@@ -36,15 +31,9 @@ const AddItemPage = () => {
     setCondition('Mint');
     setIsFullyFunctional(true);
     setIssuesDescription('');
-    setSpecifications('');
     setNotes('');
-    setPurchaseDate('');
-    setPurchasePrice('');
-    setUserEstimatedValue('');
-    setUserEstimatedValueDate('');
-    setPhoto(null); // Clear single photo
-    // Clear file input visually (this is a bit tricky, often requires resetting the input element itself)
-    const fileInput = document.getElementById('photos');
+    setPhoto(null);
+    const fileInput = document.getElementById('photo');
     if (fileInput) {
       fileInput.value = '';
     }
@@ -56,7 +45,9 @@ const AddItemPage = () => {
     setError(null);
     setSuccessMessage('');
 
-    const token = localStorage.getItem('token');
+    // *** THE FIX: Using 'authToken' to match the rest of the app ***
+    const token = localStorage.getItem('authToken'); 
+    
     if (!token) {
       setError('Authorization token not found. Please login.');
       setLoading(false);
@@ -74,15 +65,10 @@ const AddItemPage = () => {
     if (!isFullyFunctional && issuesDescription) {
       formData.append('issuesDescription', issuesDescription);
     }
-    if (specifications) formData.append('specifications', specifications);
     if (notes) formData.append('notes', notes);
-    if (purchaseDate) formData.append('purchaseDate', purchaseDate);
-    if (purchasePrice) formData.append('purchasePrice', purchasePrice);
-    if (userEstimatedValue) formData.append('userEstimatedValue', userEstimatedValue);
-    if (userEstimatedValueDate) formData.append('userEstimatedValueDate', userEstimatedValueDate);
-
-    if (photo) { // If a photo is selected
-      formData.append('photo', photo); // Append with key 'photo'
+    
+    if (photo) {
+      formData.append('photo', photo);
     }
 
     try {
@@ -102,7 +88,7 @@ const AddItemPage = () => {
     } catch (err) {
       console.error('Failed to add item:', err);
       if (err.response && (err.response.status === 401 || err.response.status === 403)) {
-        localStorage.removeItem('token');
+        localStorage.removeItem('authToken'); // Also use the correct key here
         navigate('/login');
       } else {
         setError(err.response?.data?.message || 'Failed to add item. Please try again.');
@@ -116,9 +102,6 @@ const AddItemPage = () => {
   const labelClass = "block text-sm font-medium text-vav-text-secondary mb-1";
 
   return (
-    // This div is the main container for the page's content.
-    // It will be centered by the <main> tag in App.jsx.
-    // We apply max-w-2xl to this div, and mx-auto to center it within the <main> tag's available space.
     <div className="w-full max-w-2xl mx-auto p-4">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-serif text-vav-accent-primary">Add New Item</h1>
@@ -181,53 +164,24 @@ const AddItemPage = () => {
             <textarea id="issuesDescription" value={issuesDescription} onChange={(e) => setIssuesDescription(e.target.value)} className={inputClass} rows="3" />
           </div>
         )}
-
-        {/* Specifications and Notes */}
-        <div>
-          <label htmlFor="specifications" className={labelClass}>Specifications</label>
-          <textarea id="specifications" value={specifications} onChange={(e) => setSpecifications(e.target.value)} className={inputClass} rows="4" />
-        </div>
+        
+        {/* Notes */}
         <div>
           <label htmlFor="notes" className={labelClass}>Notes</label>
           <textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} className={inputClass} rows="4" />
         </div>
-
-        {/* Purchase Details */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label htmlFor="purchaseDate" className={labelClass}>Purchase Date</label>
-            <input type="date" id="purchaseDate" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} className={inputClass} />
-          </div>
-          <div>
-            <label htmlFor="purchasePrice" className={labelClass}>Purchase Price ($)</label>
-            <input type="number" id="purchasePrice" value={purchasePrice} onChange={(e) => setPurchasePrice(e.target.value)} className={inputClass} placeholder="e.g., 150.00" min="0" step="0.01" />
-          </div>
-        </div>
-
-        {/* Estimated Value */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label htmlFor="userEstimatedValue" className={labelClass}>Estimated Value ($)</label>
-            <input type="number" id="userEstimatedValue" value={userEstimatedValue} onChange={(e) => setUserEstimatedValue(e.target.value)} className={inputClass} placeholder="e.g., 200.00" min="0" step="0.01" />
-          </div>
-          <div>
-            <label htmlFor="userEstimatedValueDate" className={labelClass}>Value Estimation Date</label>
-            <input type="date" id="userEstimatedValueDate" value={userEstimatedValueDate} onChange={(e) => setUserEstimatedValueDate(e.target.value)} className={inputClass} />
-          </div>
-        </div>
-
+        
         {/* Photo Upload */}
         <div>
-          <label htmlFor="photo" className={labelClass}>Photo (select one)</label> {/* Changed label */}
+          <label htmlFor="photo" className={labelClass}>Photo</label>
           <input
             type="file"
-            id="photo"  // Changed id
-            // multiple // Removed multiple attribute
+            id="photo"
             accept="image/*"
-            onChange={(e) => setPhoto(e.target.files[0])} // Set single photo
+            onChange={(e) => setPhoto(e.target.files[0])}
             className={`block w-full text-sm text-vav-text-secondary file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-vav-accent-primary file:text-vav-background hover:file:bg-vav-accent-secondary hover:file:text-white ${inputClass} p-0 border-dashed`}
           />
-           {photo && ( // Check if single photo exists
+           {photo && (
             <div className="mt-2 text-xs text-vav-text-secondary">
               Selected file: {photo.name}
             </div>
