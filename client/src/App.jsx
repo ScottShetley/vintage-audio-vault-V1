@@ -61,9 +61,9 @@ function App() {
           {token ? (
             // Logged IN Links
             <>
+              {/* --- NEW: Dashboard is now a main link --- */}
+              <li><Link to="/dashboard" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Dashboard</Link></li>
               <li><Link to="/wild-find" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Wild Find</Link></li>
-              {/* --- THE FIX: Reverted "Watchlist" back to "Saved Finds" --- */}
-              <li><Link to="/saved-finds" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Saved Finds</Link></li>
               <li><Link to="/ad-analyzer" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Ad Analyzer</Link></li>
               
               <li className="relative" ref={dropdownRef}>
@@ -75,7 +75,8 @@ function App() {
                 </button>
                 {isDropdownOpen && (
                   <div className="absolute right-0 mt-2 w-48 bg-vav-content-card rounded-md shadow-lg py-1 z-10">
-                    <Link to="/dashboard" onClick={() => setIsDropdownOpen(false)} className="block px-4 py-2 text-sm text-vav-text hover:bg-vav-background-alt">Dashboard</Link>
+                    {/* --- NEW: Saved Finds is now in the dropdown --- */}
+                    <Link to="/saved-finds" onClick={() => setIsDropdownOpen(false)} className="block px-4 py-2 text-sm text-vav-text hover:bg-vav-background-alt">Saved Finds</Link>
                     <Link to="/instructions" onClick={() => setIsDropdownOpen(false)} className="block px-4 py-2 text-sm text-vav-text hover:bg-vav-background-alt">Instructions</Link>
                     <button onClick={handleLogout} className="w-full text-left block px-4 py-2 text-sm text-vav-text hover:bg-vav-background-alt">
                       Logout
@@ -95,7 +96,7 @@ function App() {
         </ul>
       </nav>
 
-      <main className="w-full max-w-full md:max-w-3xl lg:max-w-5xl flex-grow flex flex-col items-center justify-center mx-auto">
+      <main className="w-full max-w-full md:max-w-4xl lg:max-w-6xl flex-grow flex flex-col items-center justify-center mx-auto">
         <Routes>
           {/* Public routes */}
           <Route path="/" element={<LandingPage />} />
