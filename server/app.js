@@ -9,8 +9,8 @@ const {GoogleGenerativeAI} = require ('@google/generative-ai');
 
 const authRoutes = require ('./routes/authRoutes');
 const audioItemRoutes = require ('./routes/audioItemRoutes');
-// 1. Import the new wild find routes
 const wildFindRoutes = require ('./routes/wildFindRoutes');
+const userRoutes = require ('./routes/userRoutes'); // --- THIS LINE IS MISSING ---
 
 const app = express ();
 const PORT = process.env.PORT || 5000;
@@ -74,8 +74,8 @@ if (geminiApiKey) {
 // --- Routes ---
 app.use ('/api/auth', authRoutes);
 app.use ('/api/items', audioItemRoutes);
-// 2. Register the new wild find routes
 app.use ('/api/wild-finds', wildFindRoutes);
+app.use ('/api/users', userRoutes); // --- THIS LINE IS MISSING ---
 
 // Basic test route
 app.get ('/', (req, res) => {

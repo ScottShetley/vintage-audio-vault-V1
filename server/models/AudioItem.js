@@ -8,6 +8,26 @@ const audioItemSchema = new mongoose.Schema (
       ref: 'User',
       required: [true, 'Audio item must belong to a user.'],
     },
+    // --- ADDED: Item Status and Privacy Fields ---
+    status: {
+      type: String,
+      required: true,
+      enum: {
+        values: ['Personal Collection', 'For Sale', 'For Trade'],
+        message: 'Status is not a valid option.',
+      },
+      default: 'Personal Collection',
+    },
+    privacy: {
+      type: String,
+      required: true,
+      enum: {
+        values: ['Public', 'Private'],
+        message: 'Privacy setting is not valid.',
+      },
+      default: 'Public',
+    },
+    // --- END ADDED ---
     make: {
       type: String,
       required: [true, 'Make is required.'],
@@ -65,7 +85,6 @@ const audioItemSchema = new mongoose.Schema (
     issuesDescription: {
       type: String,
       trim: true,
-      // Only required if not fully functional, handled in route/validation logic
     },
     specifications: {
       type: String,
@@ -75,45 +94,34 @@ const audioItemSchema = new mongoose.Schema (
       type: String,
       trim: true,
     },
-    photoUrls: [String], // Array of GCS public URLs
+    photoUrls: [String],
     purchaseDate: Date,
     purchasePrice: Number,
-    userEstimatedValue: Number,
-    userEstimatedValueDate: Date,
-
-    // --- ADDED: Fields for AI Evaluation Persistence ---
-    aiValueInsight: {
-      type: Object, // Store the entire JSON object from Gemini
-      default: null,
-    },
-    aiSuggestions: {
-      type: Object, // Store the entire JSON object from Gemini
-      default: null,
-    },
-    aiLastEvaluated: {
-      type: Date, // Timestamp of the last AI evaluation
-      default: null,
-    },
-
-    // --- ADDED: Fields for "Willing to Sell" / Marketplace ---
-    isForSale: {
-      type: Boolean,
-      default: false, // Default to not for sale
-    },
     askingPrice: {
       type: Number,
       min: [0, 'Asking price cannot be negative.'],
-      default: null, // Optional
     },
-    saleNotes: {
-      type: String,
-      trim: true,
-      maxlength: [500, 'Sale notes cannot exceed 500 characters.'],
-      default: null, // Optional
+    userEstimatedValue: Number,
+    userEstimatedValueDate: Date,
+
+    aiValueInsight: {
+      type: Object,
+      default: null,
     },
+    aiSuggestions: {
+      type: Object,
+      default: null,
+    },
+    aiLastEvaluated: {
+      type: Date,
+      default: null,
+    },
+
+    // --- REMOVED: Redundant fields for "Willing to Sell" ---
+    // The "status" field now handles this logic.
   },
   {
-    timestamps: true, // Adds createdAt and updatedAt automatically
+    timestamps: true,
   }
 );
 

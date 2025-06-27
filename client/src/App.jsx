@@ -17,6 +17,7 @@ import InstructionsPage from './pages/InstructionsPage';
 import MarketplacePage from './pages/MarketplacePage';
 import SavedFindsPage from './pages/SavedFindsPage';
 import SavedFindDetailsPage from './pages/SavedFindDetailsPage';
+import ProfilePage from './pages/ProfilePage'; // --- ADDED: Import ProfilePage ---
 
 
 // Your main CSS file which now includes Tailwind directives
@@ -61,7 +62,6 @@ function App() {
           {token ? (
             // Logged IN Links
             <>
-              {/* --- NEW: Dashboard is now a main link --- */}
               <li><Link to="/dashboard" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Dashboard</Link></li>
               <li><Link to="/wild-find" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Wild Find</Link></li>
               <li><Link to="/ad-analyzer" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Ad Analyzer</Link></li>
@@ -75,7 +75,6 @@ function App() {
                 </button>
                 {isDropdownOpen && (
                   <div className="absolute right-0 mt-2 w-48 bg-vav-content-card rounded-md shadow-lg py-1 z-10">
-                    {/* --- NEW: Saved Finds is now in the dropdown --- */}
                     <Link to="/saved-finds" onClick={() => setIsDropdownOpen(false)} className="block px-4 py-2 text-sm text-vav-text hover:bg-vav-background-alt">Saved Finds</Link>
                     <Link to="/instructions" onClick={() => setIsDropdownOpen(false)} className="block px-4 py-2 text-sm text-vav-text hover:bg-vav-background-alt">Instructions</Link>
                     <button onClick={handleLogout} className="w-full text-left block px-4 py-2 text-sm text-vav-text hover:bg-vav-background-alt">
@@ -115,6 +114,8 @@ function App() {
             <Route path="/wild-find-details/:id" element={<SavedFindDetailsPage />} />
             <Route path="/ad-analyzer" element={<AdAnalyzerPage />} />
             <Route path="/marketplace" element={<MarketplacePage />} />
+            {/* --- ADDED: Route for ProfilePage --- */}
+            <Route path="/profile/:userId" element={<ProfilePage />} />
           </Route>
 
           {/* Catch-all route for 404s */}

@@ -3,7 +3,6 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
 
-// Helper function to determine the title of a Saved Find
 const getFindTitle = (find) => {
   if (find.findType === 'Ad Analysis' && find.adAnalysis) {
       return `${find.adAnalysis.identifiedMake} ${find.adAnalysis.identifiedModel}`;
@@ -14,7 +13,6 @@ const getFindTitle = (find) => {
   return 'Unknown Item';
 };
 
-// Helper object to map tags to color classes for badges
 const tagColors = {
   'My Collection': 'bg-purple-600',
   'Wild Find': 'bg-green-600',
@@ -34,7 +32,6 @@ const DashboardPage = ({ token }) => {
       setError(null);
       
       try {
-        // 1. Set up concurrent API calls
         const personalItemsPromise = axios.get('/api/items', {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -42,13 +39,11 @@ const DashboardPage = ({ token }) => {
           headers: { Authorization: `Bearer ${token}` },
         });
         
-        // 2. Wait for both promises to resolve
         const [personalItemsResponse, savedFindsResponse] = await Promise.all([
           personalItemsPromise,
           savedFindsPromise,
         ]);
 
-        // 3. Normalize data from both sources into a unified structure
         const placeholderImageUrl = 'https://placehold.co/150x150/2C2C2C/E0E0E0?text=No+Image';
 
         const normalizedPersonalItems = personalItemsResponse.data.map(item => ({
@@ -58,25 +53,26 @@ const DashboardPage = ({ token }) => {
           tag: 'My Collection',
           detailPath: `/item/${item._id}`,
           createdAt: item.createdAt,
+          userId: item.user?._id,
+          username: item.user?.username,
         }));
         
         const normalizedSavedFinds = savedFindsResponse.data.map(find => ({
           id: find._id,
           title: getFindTitle(find),
           imageUrl: find.imageUrl || placeholderImageUrl,
-          tag: find.findType, // 'Wild Find' or 'Ad Analysis'
+          tag: find.findType,
           detailPath: `/wild-find-details/${find._id}`,
           createdAt: find.createdAt,
+          userId: find.user?._id,
+          username: find.user?.username,
         }));
 
-        // 4. Combine and sort the data
         let combined = [...normalizedPersonalItems, ...normalizedSavedFinds];
         
         combined.sort((a, b) => {
-          // Prioritize 'My Collection' items
           if (a.tag === 'My Collection' && b.tag !== 'My Collection') return -1;
           if (a.tag !== 'My Collection' && b.tag === 'My Collection') return 1;
-          // Otherwise, sort by date descending
           return new Date(b.createdAt) - new Date(a.createdAt);
         });
 
@@ -103,7 +99,6 @@ const DashboardPage = ({ token }) => {
     }
   }, [token, navigate]);
 
-  // Filter items based on the active tab
   const filteredItems = allItems.filter(item => {
     if (activeTab === 'All') return true;
     if (activeTab === 'My Collection') return item.tag === 'My Collection';
@@ -126,7 +121,6 @@ const DashboardPage = ({ token }) => {
         </Link>
       </div>
 
-      {/* Tab Navigation */}
       <div className="mb-8 border-b border-vav-text-secondary/20 flex justify-center space-x-2 sm:space-x-4">
         {['All', 'My Collection', 'Saved Finds'].map(tab => (
           <button
@@ -195,12 +189,18 @@ const DashboardPage = ({ token }) => {
                 </div>
               </div>
               <div className="p-4 flex flex-col flex-grow">
-                <h3 className="font-serif text-vav-accent-primary text-lg font-bold text-center flex-grow">
+                <h3 className="font-serif text-vav-accent-primary text-lg font-bold text-center">
                   {item.title}
                 </h3>
+                {item.username && item.userId && (
+                  <p className="text-xs text-center text-vav-text-secondary mt-1 mb-2">
+                    by <Link to={`/profile/${item.userId}`} className="hover:underline hover:text-vav-accent-secondary transition-colors">{item.username}</Link>
+                  </p>
+                )}
+                <div className="flex-grow"></div>
                 <Link
                   to={item.detailPath}
-                  className="mt-3 text-sm text-center text-vav-accent-secondary group-hover:text-vav-accent-primary font-semibold transition-colors"
+                  className="mt-auto text-sm text-center text-vav-accent-secondary group-hover:text-vav-accent-primary font-semibold transition-colors"
                 >
                   View Details &rarr;
                 </Link>

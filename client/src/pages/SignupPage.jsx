@@ -1,61 +1,62 @@
 // client/src/pages/SignupPage.jsx
-import React, {useState} from 'react';
-import {Link, useNavigate} from 'react-router-dom';
+import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
-// 1. Accept setToken as a prop
-const SignupPage = ({setToken}) => {
-  const [email, setEmail] = useState ('');
-  const [password, setPassword] = useState ('');
-  const [confirmPassword, setConfirmPassword] = useState ('');
-  const [error, setError] = useState ('');
-  // Success message is no longer needed
-  const navigate = useNavigate ();
+const SignupPage = ({ setToken }) => {
+  // --- ADDED: State for username ---
+  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState('');
+  const navigate = useNavigate();
 
   const handleSubmit = async event => {
-    event.preventDefault ();
-    setError ('');
+    event.preventDefault();
+    setError('');
 
     if (password !== confirmPassword) {
-      setError ('Passwords do not match.');
+      setError('Passwords do not match.');
       return;
     }
 
-    if (password.length < 6) {
-      setError ('Password must be at least 6 characters long.');
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters long.');
       return;
     }
 
     try {
-      const response = await axios.post (
+      const response = await axios.post(
         'http://localhost:5000/api/auth/register',
         {
+          // --- ADDED: Include username in the request ---
+          username,
           email,
           password,
         }
       );
 
-      // 2. New success logic for automatic login
       const receivedToken = response.data.token;
-      console.log ('Registration successful:', response.data);
+      console.log('Registration successful:', response.data);
 
-      setToken (receivedToken);
-      localStorage.setItem ('authToken', receivedToken);
+      setToken(receivedToken);
+      localStorage.setItem('authToken', receivedToken);
 
-      console.log ('Token stored, user logged in.');
-      navigate ('/dashboard');
+      console.log('Token stored, user logged in.');
+      navigate('/dashboard');
     } catch (err) {
-      console.error (
+      console.error(
         'Registration error:',
         err.response ? err.response.data : err.message
       );
-      setError (
-        err.response && err.response.data && err.response.data.message
-          ? err.response.data.message
-          : 'Registration failed. Please try again.'
+      setError(
+        err.response?.data?.message || 'Registration failed. Please try again.'
       );
     }
   };
+  
+  const inputClass = "mb-4 p-3 text-base border border-vav-accent-primary rounded-md w-full bg-vav-background text-vav-text placeholder-vav-text-secondary focus:outline-none focus:ring-2 focus:ring-vav-accent-secondary";
 
   return (
     <div className="w-full max-w-md mx-auto p-4 flex flex-col items-center justify-center">
@@ -66,32 +67,43 @@ const SignupPage = ({setToken}) => {
         <h2 className="text-3xl font-serif text-vav-accent-primary mb-6 text-center">
           Sign Up
         </h2>
-        {error &&
+        {error && (
           <p className="text-red-500 text-sm mb-4 text-center bg-red-900 bg-opacity-30 p-2 rounded">
             {error}
-          </p>}
-        {/* The success message paragraph is removed from here */}
+          </p>
+        )}
+        
+        {/* --- ADDED: Username input field --- */}
+        <input
+          type="text"
+          placeholder="Username"
+          value={username}
+          onChange={e => setUsername(e.target.value)}
+          className={inputClass}
+          required
+        />
+        
         <input
           type="email"
           placeholder="Email"
           value={email}
-          onChange={e => setEmail (e.target.value)}
-          className="mb-4 p-3 text-base border border-vav-accent-primary rounded-md w-full bg-vav-background text-vav-text placeholder-vav-text-secondary focus:outline-none focus:ring-2 focus:ring-vav-accent-secondary"
+          onChange={e => setEmail(e.target.value)}
+          className={inputClass}
           required
         />
         <input
           type="password"
           placeholder="Password"
           value={password}
-          onChange={e => setPassword (e.target.value)}
-          className="mb-4 p-3 text-base border border-vav-accent-primary rounded-md w-full bg-vav-background text-vav-text placeholder-vav-text-secondary focus:outline-none focus:ring-2 focus:ring-vav-accent-secondary"
+          onChange={e => setPassword(e.target.value)}
+          className={inputClass}
           required
         />
         <input
           type="password"
           placeholder="Confirm Password"
           value={confirmPassword}
-          onChange={e => setConfirmPassword (e.target.value)}
+          onChange={e => setConfirmPassword(e.target.value)}
           className="mb-6 p-3 text-base border border-vav-accent-primary rounded-md w-full bg-vav-background text-vav-text placeholder-vav-text-secondary focus:outline-none focus:ring-2 focus:ring-vav-accent-secondary"
           required
         />

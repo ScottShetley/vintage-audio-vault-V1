@@ -9,8 +9,12 @@ const AddItemPage = () => {
   // Form field states
   const [make, setMake] = useState('');
   const [model, setModel] = useState('');
-  const [itemType, setItemType] = useState('Receiver'); // Default to first option
-  const [condition, setCondition] = useState('Mint'); // Default to first option
+  const [itemType, setItemType] = useState('Receiver');
+  const [condition, setCondition] = useState('Mint');
+  // --- ADDED: State for new fields ---
+  const [status, setStatus] = useState('Personal Collection');
+  const [privacy, setPrivacy] = useState('Public');
+  // --- END ADDED ---
   const [isFullyFunctional, setIsFullyFunctional] = useState(true);
   const [issuesDescription, setIssuesDescription] = useState('');
   const [notes, setNotes] = useState('');
@@ -29,6 +33,10 @@ const AddItemPage = () => {
     setModel('');
     setItemType('Receiver');
     setCondition('Mint');
+    // --- ADDED: Clear new fields ---
+    setStatus('Personal Collection');
+    setPrivacy('Public');
+    // --- END ADDED ---
     setIsFullyFunctional(true);
     setIssuesDescription('');
     setNotes('');
@@ -45,8 +53,7 @@ const AddItemPage = () => {
     setError(null);
     setSuccessMessage('');
 
-    // *** THE FIX: Using 'authToken' to match the rest of the app ***
-    const token = localStorage.getItem('authToken'); 
+    const token = localStorage.getItem('authToken');
     
     if (!token) {
       setError('Authorization token not found. Please login.');
@@ -60,6 +67,10 @@ const AddItemPage = () => {
     formData.append('model', model);
     formData.append('itemType', itemType);
     formData.append('condition', condition);
+    // --- ADDED: Append new fields to form data ---
+    formData.append('status', status);
+    formData.append('privacy', privacy);
+    // --- END ADDED ---
     formData.append('isFullyFunctional', isFullyFunctional);
 
     if (!isFullyFunctional && issuesDescription) {
@@ -88,7 +99,7 @@ const AddItemPage = () => {
     } catch (err) {
       console.error('Failed to add item:', err);
       if (err.response && (err.response.status === 401 || err.response.status === 403)) {
-        localStorage.removeItem('authToken'); // Also use the correct key here
+        localStorage.removeItem('authToken');
         navigate('/login');
       } else {
         setError(err.response?.data?.message || 'Failed to add item. Please try again.');
@@ -141,6 +152,26 @@ const AddItemPage = () => {
             </select>
           </div>
         </div>
+
+        {/* --- ADDED: Status and Privacy Dropdowns --- */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <label htmlFor="status" className={labelClass}>Status</label>
+                <select id="status" value={status} onChange={(e) => setStatus(e.target.value)} className={inputClass}>
+                    <option value="Personal Collection">Personal Collection</option>
+                    <option value="For Sale">For Sale</option>
+                    <option value="For Trade">For Trade</option>
+                </select>
+            </div>
+            <div>
+                <label htmlFor="privacy" className={labelClass}>Privacy</label>
+                <select id="privacy" value={privacy} onChange={(e) => setPrivacy(e.target.value)} className={inputClass}>
+                    <option value="Public">Public (Visible to others)</option>
+                    <option value="Private">Private (Visible only to you)</option>
+                </select>
+            </div>
+        </div>
+        {/* --- END ADDED --- */}
 
         {/* Functionality and Issues */}
         <div>

@@ -20,28 +20,33 @@ const signToken = id => {
 // POST /api/auth/register
 router.post ('/register', async (req, res) => {
   try {
-    const {email, password} = req.body;
+    // --- UPDATED: Destructure username from request body ---
+    const {username, email, password} = req.body;
 
-    // 1. Validate input
-    if (!email || !password) {
+    // --- UPDATED: Validate all three fields ---
+    if (!username || !email || !password) {
       return res.status (400).json ({
         status: 'fail',
-        message: 'Please provide email and password.',
+        message: 'Please provide username, email, and password.',
       });
     }
 
-    // 2. Check if user already exists
-    const existingUser = await User.findOne ({email});
+    // --- UPDATED: Check if username or email already exist ---
+    const existingUser = await User.findOne ({$or: [{email}, {username}]});
     if (existingUser) {
+      const message = existingUser.email === email
+        ? 'User with this email already exists.'
+        : 'This username is already taken.';
       return res.status (409).json ({
         // 409 Conflict
         status: 'fail',
-        message: 'User with this email already exists.',
+        message,
       });
     }
 
-    // 3. Create new user (password will be hashed by the pre-save hook in User model)
+    // --- UPDATED: Create new user with username ---
     const newUser = await User.create ({
+      username: username,
       email: email,
       password: password,
     });
@@ -64,11 +69,10 @@ router.post ('/register', async (req, res) => {
       },
     });
   } catch (error) {
-    // Handle Mongoose validation errors specifically if needed
     if (error.name === 'ValidationError') {
       return res.status (400).json ({
         status: 'fail',
-        message: error.message,
+        message: 'Validation failed. Please check your inputs.',
         errors: error.errors,
       });
     }
@@ -80,13 +84,12 @@ router.post ('/register', async (req, res) => {
   }
 });
 
-// --- Login Route ---
+// --- Login Route (No changes needed here) ---
 // POST /api/auth/login
 router.post ('/login', async (req, res) => {
   try {
     const {email, password} = req.body;
 
-    // 1. Validate input
     if (!email || !password) {
       return res.status (400).json ({
         status: 'fail',
@@ -94,31 +97,22 @@ router.post ('/login', async (req, res) => {
       });
     }
 
-    // 2. Find user by email (and select password explicitly)
     const user = await User.findOne ({email}).select ('+password');
 
-    // 3. Check if user exists and password is correct
     if (!user || !await user.correctPassword (password, user.password)) {
       return res.status (401).json ({
-        // 401 Unauthorized
         status: 'fail',
         message: 'Incorrect email or password.',
       });
     }
 
-    // 4. If everything is ok, generate JWT
     const token = signToken (user._id);
 
-    // 5. Update lastLogin
     user.lastLogin = Date.now ();
-    await user.save ({validateBeforeSave: false}); // Skip validation if only updating lastLogin
+    await user.save ({validateBeforeSave: false});
 
-    // 6. Send response (excluding password)
     const userResponse = {...user.toObject ()};
     delete userResponse.password;
-    delete userResponse.passwordResetToken;
-    delete userResponse.passwordResetExpires;
-    delete userResponse.verificationToken;
 
     res.status (200).json ({
       status: 'success',

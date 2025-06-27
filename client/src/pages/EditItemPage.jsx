@@ -12,11 +12,15 @@ const EditItemPage = () => {
   const [model, setModel] = useState('');
   const [itemType, setItemType] = useState('Receiver');
   const [condition, setCondition] = useState('Mint');
+  // --- ADDED: State for new fields ---
+  const [status, setStatus] = useState('Personal Collection');
+  const [privacy, setPrivacy] = useState('Public');
+  // --- END ADDED ---
   const [isFullyFunctional, setIsFullyFunctional] = useState(true);
   const [issuesDescription, setIssuesDescription] = useState('');
   const [notes, setNotes] = useState('');
-  const [newPhotos, setNewPhotos] = useState([]); // For new files to upload
-  const [existingPhotoUrls, setExistingPhotoUrls] = useState([]); // To display/manage existing photos
+  const [newPhotos, setNewPhotos] = useState([]);
+  const [existingPhotoUrls, setExistingPhotoUrls] = useState([]);
 
   // UI states
   const [loading, setLoading] = useState(false);
@@ -27,12 +31,11 @@ const EditItemPage = () => {
   const itemTypeOptions = ['Receiver', 'Turntable', 'Speakers', 'Amplifier', 'Pre-amplifier', 'Tape Deck', 'CD Player', 'Equalizer', 'Tuner', 'Integrated Amplifier', 'Other'];
   const conditionOptions = ['Mint', 'Near Mint', 'Excellent', 'Very Good', 'Good', 'Fair', 'For Parts/Not Working', 'Restored'];
 
-  // *** THE FIX: All instances of 'token' are replaced with 'authToken' ***
   useEffect(() => {
     const fetchItemDetails = async () => {
       setInitialLoading(true);
       setError(null);
-      const token = localStorage.getItem('authToken'); // CORRECT KEY
+      const token = localStorage.getItem('authToken');
 
       if (!token) {
         setInitialLoading(false);
@@ -52,6 +55,10 @@ const EditItemPage = () => {
         setModel(itemData.model || '');
         setItemType(itemData.itemType || 'Receiver');
         setCondition(itemData.condition || 'Mint');
+        // --- ADDED: Set state for new fields on load ---
+        setStatus(itemData.status || 'Personal Collection');
+        setPrivacy(itemData.privacy || 'Public');
+        // --- END ADDED ---
         setIsFullyFunctional(itemData.isFullyFunctional ?? true);
         setIssuesDescription(itemData.issuesDescription || '');
         setNotes(itemData.notes || '');
@@ -60,7 +67,7 @@ const EditItemPage = () => {
       } catch (err) {
         console.error('Failed to load item details for editing:', err);
         if (err.response && (err.response.status === 401 || err.response.status === 403)) {
-          localStorage.removeItem('authToken'); // CORRECT KEY
+          localStorage.removeItem('authToken');
           navigate('/login');
         } else {
           setError(err.response?.data?.message || 'Failed to load item details.');
@@ -83,7 +90,7 @@ const EditItemPage = () => {
     setError(null);
     setSuccessMessage('');
 
-    const token = localStorage.getItem('authToken'); // CORRECT KEY
+    const token = localStorage.getItem('authToken');
     if (!token) {
       setLoading(false);
       navigate('/login');
@@ -95,16 +102,18 @@ const EditItemPage = () => {
     formData.append('model', model);
     formData.append('itemType', itemType);
     formData.append('condition', condition);
+    // --- ADDED: Append new fields to form data ---
+    formData.append('status', status);
+    formData.append('privacy', privacy);
+    // --- END ADDED ---
     formData.append('isFullyFunctional', isFullyFunctional);
     formData.append('issuesDescription', issuesDescription);
     formData.append('notes', notes);
 
-    // Append new photos
     for (let i = 0; i < newPhotos.length; i++) {
       formData.append('photos', newPhotos[i]);
     }
     
-    // Append the array of remaining existing photo URLs
     existingPhotoUrls.forEach(url => {
         formData.append('existingImageUrls[]', url);
     });
@@ -124,7 +133,7 @@ const EditItemPage = () => {
     } catch (err) {
       console.error('Failed to update item:', err);
       if (err.response && (err.response.status === 401 || err.response.status === 403)) {
-        localStorage.removeItem('authToken'); // CORRECT KEY
+        localStorage.removeItem('authToken');
         navigate('/login');
       } else {
         setError(err.response?.data?.message || 'Failed to update item.');
@@ -184,6 +193,26 @@ const EditItemPage = () => {
             </select>
           </div>
         </div>
+        
+        {/* --- ADDED: Status and Privacy Dropdowns --- */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <label htmlFor="status" className={labelClass}>Status</label>
+                <select id="status" value={status} onChange={(e) => setStatus(e.target.value)} className={inputClass}>
+                    <option value="Personal Collection">Personal Collection</option>
+                    <option value="For Sale">For Sale</option>
+                    <option value="For Trade">For Trade</option>
+                </select>
+            </div>
+            <div>
+                <label htmlFor="privacy" className={labelClass}>Privacy</label>
+                <select id="privacy" value={privacy} onChange={(e) => setPrivacy(e.target.value)} className={inputClass}>
+                    <option value="Public">Public (Visible to others)</option>
+                    <option value="Private">Private (Visible only to you)</option>
+                </select>
+            </div>
+        </div>
+        {/* --- END ADDED --- */}
 
         <div>
           <div className="flex items-center">
