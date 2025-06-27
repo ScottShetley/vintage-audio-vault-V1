@@ -34,8 +34,6 @@ const uploadForAnalysis = multer ({
   limits: {fileSize: 10 * 1024 * 1024},
 }).single ('adImage');
 
-// *** FIX: Corrected multer instance for the Wild Find feature ***
-// The field name is now 'image' to match WildFindPage.jsx
 const uploadWildFind = multer ({
   storage: multer.memoryStorage (),
   limits: {fileSize: 10 * 1024 * 1024},
@@ -76,7 +74,9 @@ const uploadToGcsMiddleware = async (req, res, next) => {
 // GET /api/items - Get all items for a user
 router.get ('/', protect, async (req, res) => {
   try {
-    const items = await AudioItem.find ({user: req.user.id}).sort ({createdAt: -1});
+    const items = await AudioItem.find ({user: req.user.id})
+      .populate('user', 'username email _id') // UPDATED
+      .sort ({createdAt: -1});
     res.json (items);
   } catch (error) {
     res.status (500).json ({message: 'Server error while fetching items.'});
@@ -151,7 +151,7 @@ router.put ('/:id', protect, uploadMultiple, uploadToGcsMiddleware, async (req, 
         );
         res.json(updatedItem);
     } catch (error) {
-        res.status(500).json({ message: 'Server error while updating item.' });
+        res.status (500).json ({message: 'Server error while updating item.'});
     }
 });
 
@@ -180,25 +180,22 @@ router.delete ('/:id', protect, async (req, res) => {
 
 // --- AI Feature Routes ---
 
-// *** FIX: This route now only performs the initial visual scan and returns data in the structure the frontend expects ***
 router.post('/wild-find-initial-scan', protect, uploadWildFind, uploadToGcsMiddleware, async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ message: 'No image was uploaded for the Wild Find scan.' });
   }
 
   try {
-    // Step 1: Get the initial identification from the image.
     const visualAnalysisArray = await getVisualAnalysis(req.file);
 
     if (!visualAnalysisArray || visualAnalysisArray.length === 0) {
       return res.status(404).json({ message: 'AI could not identify any item from the image.' });
     }
     
-    // Step 2: Return the response in the multi-step format expected by WildFindPage.jsx
     res.status(200).json({
         status: 'success',
-        imageUrl: req.gcsUrl, // The URL of the uploaded image from GCS
-        scannedItems: visualAnalysisArray, // The array of items found
+        imageUrl: req.gcsUrl, 
+        scannedItems: visualAnalysisArray, 
     });
 
   } catch (error) {
@@ -207,9 +204,8 @@ router.post('/wild-find-initial-scan', protect, uploadWildFind, uploadToGcsMiddl
   }
 });
 
-// *** NEW: The missing route for getting detailed analysis after user confirmation ***
 router.post('/wild-find-detailed-analysis', protect, async (req, res) => {
-  const { items } = req.body; // Expects an array of items with make, model, condition
+  const { items } = req.body; 
 
   if (!items || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ status: 'error', message: 'No items provided for detailed analysis.' });
@@ -224,7 +220,7 @@ router.post('/wild-find-detailed-analysis', protect, async (req, res) => {
 
     res.status(200).json({
       status: 'success',
-      analyses: analyses, // Send back an array of full analysis objects
+      analyses: analyses, 
     });
 
   } catch (error) {
@@ -234,7 +230,6 @@ router.post('/wild-find-detailed-analysis', protect, async (req, res) => {
 });
 
 
-// POST /api/items/analyze-ad-listing - The Ad Analyzer Route
 router.post('/analyze-ad-listing', protect, uploadForAnalysis, uploadToGcsMiddleware, async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ message: 'No ad image was uploaded.' });
@@ -263,7 +258,6 @@ router.post('/analyze-ad-listing', protect, uploadForAnalysis, uploadToGcsMiddle
         textAnalysis
     );
     
-    // This is the complete report we send to the frontend.
     const finalReport = {
         gcsUrl: req.gcsUrl, 
         identifiedMake,
@@ -282,7 +276,6 @@ router.post('/analyze-ad-listing', protect, uploadForAnalysis, uploadToGcsMiddle
   }
 });
 
-// PATCH /api/items/:id/ai-evaluation - Get AI insights for an existing item
 router.patch ('/:id/ai-evaluation', protect, async (req, res) => {
   try {
     const item = await AudioItem.findById (req.params.id);
