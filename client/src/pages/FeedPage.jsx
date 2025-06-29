@@ -1,77 +1,77 @@
-// client/src/pages/MarketplacePage.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
-import ItemCard from '../components/ItemCard';
+import { useNavigate } from 'react-router-dom';
+import ItemCard from '/src/components/ItemCard.jsx';
 
-const DISCOVER_PAGE_LIMIT = 20;
+const FEED_PAGE_LIMIT = 20;
 
-const MarketplacePage = () => {
+const FeedPage = () => {
+  const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
 
-  const fetchDiscoverItems = useCallback(async (currentPage) => {
+  const fetchFeedItems = useCallback(async (currentPage) => {
     setLoading(true);
     setError(null);
+    const token = localStorage.getItem('authToken');
 
     try {
-      const { data } = await axios.get(`/api/items/discover`, {
-        params: { page: currentPage, limit: DISCOVER_PAGE_LIMIT },
+      const { data } = await axios.get(`/api/users/feed`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { page: currentPage, limit: FEED_PAGE_LIMIT },
       });
 
       if (data.length > 0) {
+        // Normalize data for the ItemCard component
         const normalizedItems = data.map(item => ({
           id: item._id,
           title: `${item.make} ${item.model}`,
-          imageUrl: item.photoUrls?.[0],
-          tag: item.itemType, 
+          imageUrl: item.photoUrls?.[0], // Assumes photoUrls is an array
+          tag: 'My Collection', // For consistency, though we could create a new tag
           detailPath: `/item/${item._id}`,
           createdAt: item.createdAt,
           userId: item.user?._id,
           username: item.user?.username,
         }));
-
-        // --- THE FIX IS HERE ---
-        // If it's the first page, replace the items. Otherwise, append them.
-        if (currentPage === 1) {
-          setItems(normalizedItems);
-        } else {
-          setItems(prevItems => [...prevItems, ...normalizedItems]);
-        }
-        // --- END FIX ---
-
-        setHasMore(data.length === DISCOVER_PAGE_LIMIT);
+        setItems(prevItems => [...prevItems, ...normalizedItems]);
+        setHasMore(data.length === FEED_PAGE_LIMIT);
       } else {
         setHasMore(false);
       }
     } catch (err) {
-      console.error('Failed to load discover data:', err);
-      setError(err.response?.data?.message || 'Failed to load items. Please try again.');
+      console.error('Failed to load feed data:', err);
+      if (err.response && (err.response.status === 401 || err.response.status === 403)) {
+        localStorage.removeItem('authToken');
+        navigate('/login');
+      } else {
+        setError(err.response?.data?.message || 'Failed to load your feed. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [navigate]);
 
   useEffect(() => {
-    // We only want to fetch data once on initial load.
-    // The double-invocation is a development-only feature of Strict Mode.
-    fetchDiscoverItems(1);
-  }, [fetchDiscoverItems]);
+    fetchFeedItems(1);
+  }, [fetchFeedItems]);
 
   const handleLoadMore = () => {
     const nextPage = page + 1;
     setPage(nextPage);
-    fetchDiscoverItems(nextPage);
+    fetchFeedItems(nextPage);
   };
 
   return (
     <div className="w-full max-w-6xl mx-auto p-4">
-      <div className="text-center mb-8">
-        <h1 className="text-4xl font-serif text-vav-accent-primary">Discover</h1>
-        <p className="text-lg text-vav-text-secondary mt-2">Browse public items from all users in the vault.</p>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-4xl font-serif text-vav-accent-primary">Your Feed</h1>
       </div>
+      <p className="mb-8 text-vav-text-secondary border-b border-vav-text-secondary/20 pb-4">
+        The latest public items from users you follow.
+      </p>
 
       {error && (
         <div className="text-center p-4 bg-red-900 bg-opacity-30 rounded-md">
@@ -100,12 +100,12 @@ const MarketplacePage = () => {
       {!loading && !error && items.length === 0 && (
         <div className="text-center mt-8 p-6 bg-vav-content-card rounded-lg shadow-md">
           <p className="text-vav-text text-lg mb-4">
-            No public items found in the vault yet. Be the first to add one!
+            Your feed is empty. Find and follow users to see their public items here.
           </p>
         </div>
       )}
 
-      {hasMore && !loading && items.length > 0 && (
+      {hasMore && !loading && (
         <div className="text-center mt-10">
           <button
             onClick={handleLoadMore}
@@ -120,4 +120,4 @@ const MarketplacePage = () => {
   );
 };
 
-export default MarketplacePage;
+export default FeedPage;

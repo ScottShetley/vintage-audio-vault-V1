@@ -71,6 +71,27 @@ const uploadToGcsMiddleware = async (req, res, next) => {
 
 // --- Main Audio Item CRUD Routes ---
 
+// GET /api/items/discover - Get all public items from all users
+// THIS ROUTE MUST BE DEFINED *BEFORE* THE '/:id' ROUTE
+router.get('/discover', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 20;
+    const skip = (page - 1) * limit;
+
+    const items = await AudioItem.find({ privacy: 'Public' })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate('user', 'username'); // Populate author's username for display
+
+    res.json(items);
+  } catch (error) {
+    console.error('Error fetching public discover items:', error);
+    res.status(500).json({ message: 'Server error while fetching discover items.' });
+  }
+});
+
 // GET /api/items - Get all items for a user
 router.get ('/', protect, async (req, res) => {
   try {

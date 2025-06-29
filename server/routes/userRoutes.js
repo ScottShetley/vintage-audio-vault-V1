@@ -10,6 +10,44 @@ router.get ('/me', protect, async (req, res) => {
   res.status (200).json (req.user);
 });
 
+// --- NEW FEED ENDPOINT ---
+router.get ('/feed', protect, async (req, res) => {
+  try {
+    const loggedInUser = req.user;
+
+    // Ensure the 'following' list is populated, even if it's empty
+    if (!loggedInUser.following) {
+      return res.status (200).json ([]);
+    }
+
+    const followingIds = loggedInUser.following;
+
+    // Handle case where user follows no one
+    if (followingIds.length === 0) {
+      return res.status (200).json ([]);
+    }
+
+    const page = parseInt (req.query.page, 10) || 1;
+    const limit = parseInt (req.query.limit, 10) || 20;
+    const skip = (page - 1) * limit;
+
+    const feedItems = await AudioItem.find ({
+      user: {$in: followingIds},
+      privacy: 'Public', // Match the public privacy setting from the schema
+    })
+      .sort ({createdAt: -1}) // Show newest items first
+      .skip (skip)
+      .limit (limit)
+      .populate ('user', 'username'); // Populate author's username
+
+    res.status (200).json (feedItems);
+  } catch (error) {
+    console.error ('Error fetching user feed:', error);
+    res.status (500).json ({message: 'Server error while fetching feed.'});
+  }
+});
+// --- END NEW FEED ENDPOINT ---
+
 router.post ('/:id/follow', protect, async (req, res) => {
   const session = await mongoose.startSession ();
   session.startTransaction ();

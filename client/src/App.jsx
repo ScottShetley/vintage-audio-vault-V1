@@ -17,7 +17,8 @@ import InstructionsPage from './pages/InstructionsPage';
 import MarketplacePage from './pages/MarketplacePage';
 import SavedFindsPage from './pages/SavedFindsPage';
 import SavedFindDetailsPage from './pages/SavedFindDetailsPage';
-import ProfilePage from './pages/ProfilePage'; // --- ADDED: Import ProfilePage ---
+import ProfilePage from './pages/ProfilePage';
+import FeedPage from './pages/FeedPage';
 
 
 // Your main CSS file which now includes Tailwind directives
@@ -62,6 +63,9 @@ function App() {
           {token ? (
             // Logged IN Links
             <>
+              {/* --- ADDED: Link to Marketplace Page --- */}
+              <li><Link to="/marketplace" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Marketplace</Link></li>
+              <li><Link to="/feed" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Feed</Link></li>
               <li><Link to="/dashboard" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Dashboard</Link></li>
               <li><Link to="/wild-find" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Wild Find</Link></li>
               <li><Link to="/ad-analyzer" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Ad Analyzer</Link></li>
@@ -87,6 +91,8 @@ function App() {
           ) : (
             // Logged OUT Links
             <>
+              {/* --- ADDED: Link to Marketplace Page --- */}
+              <li><Link to="/marketplace" className="text-lg font-bold text-vav-accent-primary hover:text-vav-text transition-colors">Marketplace</Link></li>
               <li><Link to="/instructions" className="text-lg font-bold text-vav-accent-primary hover:text-vav-text transition-colors">Instructions</Link></li>
               <li><Link to="/login" className="text-lg font-bold text-vav-accent-primary hover:text-vav-text transition-colors">Login</Link></li>
               <li><Link to="/signup" className="text-lg font-bold text-vav-accent-primary hover:text-vav-text transition-colors">Sign Up</Link></li>
@@ -105,6 +111,7 @@ function App() {
 
           {/* Protected Routes */}
           <Route element={<ProtectedRoute />}>
+            <Route path="/feed" element={<FeedPage />} />
             <Route path="/dashboard" element={<DashboardPage token={token} />} />
             <Route path="/add-item" element={<AddItemPage />} />
             <Route path="/item/:id" element={<DetailedItemView />} />
@@ -114,7 +121,6 @@ function App() {
             <Route path="/wild-find-details/:id" element={<SavedFindDetailsPage />} />
             <Route path="/ad-analyzer" element={<AdAnalyzerPage />} />
             <Route path="/marketplace" element={<MarketplacePage />} />
-            {/* --- ADDED: Route for ProfilePage --- */}
             <Route path="/profile/:userId" element={<ProfilePage />} />
           </Route>
 

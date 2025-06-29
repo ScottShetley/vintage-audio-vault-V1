@@ -1,8 +1,8 @@
-// client/src/pages/ProfilePage.jsx
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useParams, Link } from 'react-router-dom';
 import { jwtDecode } from 'jwt-decode';
+import ItemCard from '../components/ItemCard'; // --- IMPORT the reusable ItemCard component
 
 const ProfilePage = () => {
     const { userId } = useParams();
@@ -24,21 +24,16 @@ const ProfilePage = () => {
             }
 
             try {
-                const decodedToken = jwtDecode(token);
-                const loggedInUserId = decodedToken.id;
-
-                const profileRequest = axios.get(`http://localhost:5000/api/users/profile/${userId}`);
-                const loggedInUserRequest = axios.get(`http://localhost:5000/api/users/me`, {
+                // We fetch the logged-in user's data from the /me endpoint
+                // to ensure we have the latest 'following' list.
+                const loggedInUserResponse = await axios.get('/api/users/me', {
                     headers: { Authorization: `Bearer ${token}` }
                 });
-
-                const [profileResponse, loggedInUserResponse] = await Promise.all([
-                    profileRequest,
-                    loggedInUserRequest
-                ]);
-
-                setProfile(profileResponse.data);
                 setLoggedInUser(loggedInUserResponse.data);
+
+                // Then fetch the profile data for the user whose page we are on.
+                const profileResponse = await axios.get(`/api/users/profile/${userId}`);
+                setProfile(profileResponse.data);
 
             } catch (err) {
                 console.error("Failed to fetch profile data:", err);
@@ -54,26 +49,32 @@ const ProfilePage = () => {
     const handleFollow = async () => {
         const token = localStorage.getItem('authToken');
         try {
-            await axios.post(`http://localhost:5000/api/users/${userId}/follow`, {}, {
+            // Use relative paths to leverage the Vite proxy
+            await axios.post(`/api/users/${userId}/follow`, {}, {
                 headers: { Authorization: `Bearer ${token}` }
             });
+            // Optimistic UI update
             setLoggedInUser(prev => ({ ...prev, following: [...prev.following, userId] }));
             setProfile(prev => ({ ...prev, followersCount: prev.followersCount + 1 }));
         } catch (err) {
             console.error("Failed to follow user:", err);
+            // Optionally, revert UI on failure
         }
     };
 
     const handleUnfollow = async () => {
         const token = localStorage.getItem('authToken');
         try {
-            await axios.post(`http://localhost:5000/api/users/${userId}/unfollow`, {}, {
+            // Use relative paths to leverage the Vite proxy
+            await axios.post(`/api/users/${userId}/unfollow`, {}, {
                 headers: { Authorization: `Bearer ${token}` }
             });
+            // Optimistic UI update
             setLoggedInUser(prev => ({ ...prev, following: prev.following.filter(id => id !== userId) }));
             setProfile(prev => ({ ...prev, followersCount: prev.followersCount - 1 }));
         } catch (err) {
             console.error("Failed to unfollow user:", err);
+            // Optionally, revert UI on failure
         }
     };
 
@@ -90,7 +91,9 @@ const ProfilePage = () => {
     }
 
     const isOwnProfile = loggedInUser._id === userId;
-    const isFollowing = loggedInUser.following.includes(userId);
+    // Check if the loggedInUser's following array (which contains IDs) includes the current profile's ID
+    const isFollowing = loggedInUser.following.some(followedUser => followedUser._id === userId);
+
 
     return (
         <div className="w-full max-w-4xl mx-auto p-4">
@@ -123,14 +126,21 @@ const ProfilePage = () => {
                         This user's collection is private.
                     </div>
                 ) : profile.items.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {profile.items.map(item => (
-                            <Link to={`/item/${item._id}`} key={item._id} className="block bg-vav-content-card p-4 rounded-lg shadow-lg hover:shadow-2xl hover:-translate-y-1 transition-all">
-                                <img src={item.photoUrls[0] || 'https://placehold.co/300x200/2C2C2C/E0E0E0?text=No+Image'} alt={`${item.make} ${item.model}`} className="w-full h-48 object-cover rounded-md mb-4" />
-                                <h3 className="text-lg font-bold text-vav-text-primary">{item.make} {item.model}</h3>
-                                <p className="text-sm text-vav-text-secondary">{item.itemType}</p>
-                            </Link>
-                        ))}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                        {/* --- REFACTOR to use the ItemCard component --- */}
+                        {profile.items.map(item => {
+                            const normalizedItem = {
+                                id: item._id,
+                                title: `${item.make} ${item.model}`,
+                                imageUrl: item.photoUrls?.[0],
+                                tag: 'My Collection', // Or derive from item.status if needed
+                                detailPath: `/item/${item._id}`,
+                                // The profile doesn't include the item creator's name, but we can omit it here.
+                                // username: profile.username, 
+                                // userId: profile._id
+                            };
+                            return <ItemCard key={item._id} item={normalizedItem} />;
+                        })}
                     </div>
                 ) : (
                     <div className="text-center p-8 bg-vav-content-card rounded-lg text-vav-text-secondary">
