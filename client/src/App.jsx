@@ -1,6 +1,7 @@
 // client/src/App.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 
 // Import your page components
 import LoginPage from './pages/LoginPage';
@@ -26,13 +27,38 @@ import './index.css';
 
 function App() {
   const [token, setToken] = useState(localStorage.getItem('authToken'));
+  const [currentUser, setCurrentUser] = useState(null); 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   
   const navigate = useNavigate();
   const dropdownRef = useRef(null);
 
+  useEffect(() => {
+    const fetchUser = async () => {
+      if (token) {
+        try {
+          const { data } = await axios.get('/api/users/me', {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          });
+          setCurrentUser(data);
+        } catch (error) {
+          console.error("Failed to fetch user data:", error);
+          handleLogout();
+        }
+      } else {
+        setCurrentUser(null);
+      }
+    };
+
+    fetchUser();
+  }, [token]);
+
+
   const handleLogout = () => {
     setToken(null);
+    setCurrentUser(null);
     localStorage.removeItem('authToken');
     setIsDropdownOpen(false);
     navigate('/');
@@ -63,35 +89,38 @@ function App() {
           {token ? (
             // Logged IN Links
             <>
-              {/* --- ADDED: Link to Marketplace Page --- */}
               <li><Link to="/marketplace" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Marketplace</Link></li>
               <li><Link to="/feed" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Feed</Link></li>
               <li><Link to="/dashboard" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Dashboard</Link></li>
               <li><Link to="/wild-find" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Wild Find</Link></li>
               <li><Link to="/ad-analyzer" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Ad Analyzer</Link></li>
               
-              <li className="relative" ref={dropdownRef}>
-                <button onClick={() => setIsDropdownOpen(!isDropdownOpen)} className="flex items-center gap-2 bg-vav-accent-primary hover:bg-vav-accent-secondary text-white font-bold py-2 px-4 rounded transition-colors">
-                  My Account
-                  <svg className={`w-4 h-4 transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-                  </svg>
-                </button>
-                {isDropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-48 bg-vav-content-card rounded-md shadow-lg py-1 z-10">
-                    <Link to="/saved-finds" onClick={() => setIsDropdownOpen(false)} className="block px-4 py-2 text-sm text-vav-text hover:bg-vav-background-alt">Saved Finds</Link>
-                    <Link to="/instructions" onClick={() => setIsDropdownOpen(false)} className="block px-4 py-2 text-sm text-vav-text hover:bg-vav-background-alt">Instructions</Link>
-                    <button onClick={handleLogout} className="w-full text-left block px-4 py-2 text-sm text-vav-text hover:bg-vav-background-alt">
-                      Logout
-                    </button>
-                  </div>
-                )}
-              </li>
+              {/* --- MODIFIED: User account dropdown button now shows username --- */}
+              {currentUser && (
+                <li className="relative" ref={dropdownRef}>
+                  <button onClick={() => setIsDropdownOpen(!isDropdownOpen)} className="flex items-center gap-2 bg-vav-accent-primary hover:bg-vav-accent-secondary text-white font-bold py-2 px-4 rounded transition-colors">
+                    {currentUser.username}
+                    <svg className={`w-4 h-4 transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                    </svg>
+                  </button>
+                  {isDropdownOpen && (
+                    <div className="absolute right-0 mt-2 w-48 bg-vav-content-card rounded-md shadow-lg py-1 z-10">
+                      {/* --- ADDED: Link to user's own profile --- */}
+                      <Link to={`/profile/${currentUser._id}`} onClick={() => setIsDropdownOpen(false)} className="block px-4 py-2 text-sm text-vav-text hover:bg-vav-background-alt font-semibold">My Profile</Link>
+                      <Link to="/saved-finds" onClick={() => setIsDropdownOpen(false)} className="block px-4 py-2 text-sm text-vav-text hover:bg-vav-background-alt">Saved Finds</Link>
+                      <Link to="/instructions" onClick={() => setIsDropdownOpen(false)} className="block px-4 py-2 text-sm text-vav-text hover:bg-vav-background-alt">Instructions</Link>
+                      <button onClick={handleLogout} className="w-full text-left block px-4 py-2 text-sm text-vav-text hover:bg-vav-background-alt">
+                        Logout
+                      </button>
+                    </div>
+                  )}
+                </li>
+              )}
             </>
           ) : (
             // Logged OUT Links
             <>
-              {/* --- ADDED: Link to Marketplace Page --- */}
               <li><Link to="/marketplace" className="text-lg font-bold text-vav-accent-primary hover:text-vav-text transition-colors">Marketplace</Link></li>
               <li><Link to="/instructions" className="text-lg font-bold text-vav-accent-primary hover:text-vav-text transition-colors">Instructions</Link></li>
               <li><Link to="/login" className="text-lg font-bold text-vav-accent-primary hover:text-vav-text transition-colors">Login</Link></li>
@@ -108,7 +137,9 @@ function App() {
           <Route path="/instructions" element={<InstructionsPage />} />
           <Route path="/login" element={<LoginPage setToken={setToken} />} />
           <Route path="/signup" element={<SignupPage setToken={setToken} />} />
-
+          <Route path="/marketplace" element={<MarketplacePage />} />
+          <Route path="/profile/:userId" element={<ProfilePage />} />
+          
           {/* Protected Routes */}
           <Route element={<ProtectedRoute />}>
             <Route path="/feed" element={<FeedPage />} />
@@ -120,8 +151,6 @@ function App() {
             <Route path="/saved-finds" element={<SavedFindsPage />} />
             <Route path="/wild-find-details/:id" element={<SavedFindDetailsPage />} />
             <Route path="/ad-analyzer" element={<AdAnalyzerPage />} />
-            <Route path="/marketplace" element={<MarketplacePage />} />
-            <Route path="/profile/:userId" element={<ProfilePage />} />
           </Route>
 
           {/* Catch-all route for 404s */}
