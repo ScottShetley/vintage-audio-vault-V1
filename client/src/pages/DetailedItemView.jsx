@@ -2,6 +2,11 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate, useParams, Link } from 'react-router-dom';
+import AiAnalysisDisplay from '../components/AiAnalysisDisplay';
+// --- VAV-UPDATE ---
+// Importing an icon for our new notification box
+import { IoInformationCircle } from 'react-icons/io5';
+
 
 const DetailedItemView = () => {
   const navigate = useNavigate();
@@ -11,17 +16,12 @@ const DetailedItemView = () => {
   const [error, setError] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError] = useState(null);
-  
   const placeholderImageUrl = 'https://placehold.co/300x200/2C2C2C/E0E0E0?text=No+Image';
 
-  // *** THE FIX: All instances of 'token' are replaced with 'authToken' ***
   const fetchItemDetails = async () => {
     setLoading(true);
     setError(null);
-
-    const token = localStorage.getItem('authToken'); // CORRECT KEY
+    const token = localStorage.getItem('authToken');
 
     if (!token) {
       setError('Authorization token not found. Please login.');
@@ -31,7 +31,7 @@ const DetailedItemView = () => {
     }
 
     try {
-      const response = await axios.get(`http://localhost:5000/api/items/${id}`, {
+      const response = await axios.get(`/api/items/${id}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -40,7 +40,7 @@ const DetailedItemView = () => {
     } catch (err) {
       console.error('Failed to load item details:', err);
       if (err.response && (err.response.status === 401 || err.response.status === 403)) {
-        localStorage.removeItem('authToken'); // CORRECT KEY
+        localStorage.removeItem('authToken');
         navigate('/login');
       } else if (err.response && err.response.status === 404) {
         setError('Item not found.');
@@ -60,7 +60,7 @@ const DetailedItemView = () => {
 
     setLoading(true);
     setError(null);
-    const token = localStorage.getItem('authToken'); // CORRECT KEY
+    const token = localStorage.getItem('authToken');
 
     if (!token) {
       setError('Authorization token not found. Please login.');
@@ -70,7 +70,7 @@ const DetailedItemView = () => {
     }
 
     try {
-      await axios.delete(`http://localhost:5000/api/items/${id}`, {
+      await axios.delete(`/api/items/${id}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -79,7 +79,7 @@ const DetailedItemView = () => {
     } catch (err) {
       console.error('Failed to delete item:', err);
       if (err.response && (err.response.status === 401 || err.response.status === 403)) {
-        localStorage.removeItem('authToken'); // CORRECT KEY
+        localStorage.removeItem('authToken');
         navigate('/login');
       } else {
         setError(err.response?.data?.message || 'Failed to delete item.');
@@ -90,40 +90,6 @@ const DetailedItemView = () => {
     }
   };
   
-  const handleGetAndSaveAiEvaluation = async () => {
-    setAiLoading(true);
-    setAiError(null);
-    const token = localStorage.getItem('authToken'); // CORRECT KEY
-
-    if (!token) {
-      setAiError('Authorization token not found. Please login.');
-      setAiLoading(false);
-      navigate('/login');
-      return;
-    }
-
-    try {
-      const response = await axios.patch(`http://localhost:5000/api/items/${id}/ai-evaluation`, 
-      {},
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      setItem(response.data);
-    } catch (err) {
-      console.error('Failed to get AI evaluation:', err);
-      if (err.response && (err.response.status === 401 || err.response.status === 403)) {
-        localStorage.removeItem('authToken'); // CORRECT KEY
-        navigate('/login');
-      } else {
-        setAiError(err.response?.data?.message || 'Failed to get AI evaluation.');
-      }
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
   useEffect(() => {
     fetchItemDetails();
   }, [id]);
@@ -155,7 +121,26 @@ const DetailedItemView = () => {
           </Link>
         </div>
 
+        {/* --- VAV-UPDATE --- */}
+        {/* This is the new notification box. It will only render if a correction was made. */}
+        {item.identification && item.identification.wasCorrected && (
+          <div className="bg-yellow-900 bg-opacity-30 border-l-4 border-yellow-500 text-yellow-200 p-4 my-6 rounded-r-lg shadow" role="alert">
+            <div className="flex">
+              <div className="py-1">
+                <IoInformationCircle className="h-6 w-6 text-yellow-400 mr-4"/>
+              </div>
+              <div>
+                <p className="font-bold text-yellow-300">AI Suggestion</p>
+                <p className="text-sm">
+                  You entered <strong>{item.identification.userInput}</strong>, but the AI identified this as an <strong>{item.identification.aiIdentifiedAs}</strong> from the photo. The analysis below is for the AI-identified model.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 mb-8 text-sm">
+          {/* ... (rest of the item details display remains the same) ... */}
           <div className="md:col-span-2 mb-4">
             <h3 className="text-xl font-serif text-vav-text-secondary mb-3">Photo</h3>
             <img
@@ -165,7 +150,6 @@ const DetailedItemView = () => {
               onError={(e) => { e.target.onerror = null; e.target.src = placeholderImageUrl; }}
             />
           </div>
-
           <div>
             <p className="text-vav-text-secondary">Item Type:</p>
             <p className="text-vav-text font-medium">{item.itemType}</p>
@@ -192,32 +176,18 @@ const DetailedItemView = () => {
           )}
         </div>
 
-        <div className="mt-8 pt-6 border-t border-vav-text-secondary">
-          <h3 className="text-xl font-serif text-vav-accent-primary mb-4">AI Insights</h3>
-          {aiError && (
-            <p className="text-red-500 text-sm mb-4 text-center p-2 rounded">{aiError}</p>
-          )}
-          <div className="flex justify-center gap-4 mb-6">
-            <button
-              onClick={handleGetAndSaveAiEvaluation}
-              disabled={aiLoading}
-              className="bg-vav-accent-primary text-vav-background font-semibold py-2 px-4 rounded-md shadow-md hover:bg-vav-accent-secondary transition-colors disabled:opacity-50"
-            >
-              {aiLoading ? 'Evaluating...' : 'Get AI Evaluation'}
-            </button>
-          </div>
-
-          {item.aiValueInsight && (
-            <div className="bg-vav-background p-4 rounded-md mb-4">
-              <p className="text-vav-text-secondary text-base mb-2 text-center">AI Market Valuation:</p>
-              {item.aiValueInsight.estimatedValueUSD && <p className="text-vav-accent-primary text-xl font-bold mb-2 text-center">{item.aiValueInsight.estimatedValueUSD}</p>}
-              {item.aiValueInsight.marketDesirability && <p className="text-vav-text text-sm">{item.aiValueInsight.marketDesirability}</p>}
-              {item.aiValueInsight.disclaimer && <p className="text-vav-text-secondary text-xs text-center mt-2">{item.aiValueInsight.disclaimer}</p>}
-            </div>
+        <div className="mt-8 pt-6 border-t border-vav-text-secondary/50">
+          <h3 className="text-2xl font-serif text-vav-accent-primary mb-4 text-center">AI Analysis</h3>
+          {item.aiAnalysis ? (
+            <AiAnalysisDisplay analysis={item.aiAnalysis} />
+          ) : (
+            <p className="text-vav-text-secondary text-center p-4 bg-vav-background rounded-md">
+              AI analysis has not yet been generated for this item.
+            </p>
           )}
         </div>
 
-        <div className="flex justify-center gap-4 mt-8 pt-6 border-t border-vav-text-secondary">
+        <div className="flex justify-center gap-4 mt-8 pt-6 border-t border-vav-text-secondary/50">
           <Link
             to={`/edit-item/${item._id}`}
             className="bg-vav-accent-primary text-vav-background font-semibold py-2 px-6 rounded-md shadow-md hover:bg-vav-accent-secondary"
@@ -233,27 +203,27 @@ const DetailedItemView = () => {
         </div>
 
         {showDeleteConfirm && (
-          <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
-            <div className="bg-vav-content-card p-8 rounded-lg shadow-xl text-center">
-              <p className="text-lg text-vav-text mb-6">Delete {item.make} {item.model}?</p>
-              <div className="flex justify-center gap-4">
-                <button
-                  onClick={handleDelete}
-                  disabled={loading}
-                  className="bg-red-600 text-white font-semibold py-2 px-6 rounded-md hover:bg-red-700 disabled:opacity-50"
-                >
-                  {loading ? 'Deleting...' : 'Yes, Delete'}
-                </button>
-                <button
-                  onClick={() => setShowDeleteConfirm(false)}
-                  disabled={loading}
-                  className="bg-gray-600 text-white font-semibold py-2 px-6 rounded-md hover:bg-gray-700"
-                >
-                  Cancel
-                </button>
-              </div>
+            <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
+                <div className="bg-vav-content-card p-8 rounded-lg shadow-xl text-center">
+                    <p className="text-lg text-vav-text mb-6">Delete {item.make} {item.model}?</p>
+                    <div className="flex justify-center gap-4">
+                        <button
+                            onClick={handleDelete}
+                            disabled={loading}
+                            className="bg-red-600 text-white font-semibold py-2 px-6 rounded-md hover:bg-red-700 disabled:opacity-50"
+                        >
+                            {loading ? 'Deleting...' : 'Yes, Delete'}
+                        </button>
+                        <button
+                            onClick={() => setShowDeleteConfirm(false)}
+                            disabled={loading}
+                            className="bg-gray-600 text-white font-semibold py-2 px-6 rounded-md hover:bg-gray-700"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </div>
             </div>
-          </div>
         )}
       </div>
     </div>

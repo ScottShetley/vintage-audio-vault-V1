@@ -8,7 +8,6 @@ const audioItemSchema = new mongoose.Schema (
       ref: 'User',
       required: [true, 'Audio item must belong to a user.'],
     },
-    // --- ADDED: Item Status and Privacy Fields ---
     status: {
       type: String,
       required: true,
@@ -27,7 +26,6 @@ const audioItemSchema = new mongoose.Schema (
       },
       default: 'Public',
     },
-    // --- END ADDED ---
     make: {
       type: String,
       required: [true, 'Make is required.'],
@@ -104,21 +102,22 @@ const audioItemSchema = new mongoose.Schema (
     userEstimatedValue: Number,
     userEstimatedValueDate: Date,
 
-    aiValueInsight: {
+    // --- VAV-UPDATE ---
+    // Added a dedicated object to track AI identification vs. user input.
+    identification: {
+      wasCorrected: {type: Boolean, default: false},
+      userInput: {type: String, default: ''},
+      aiIdentifiedAs: {type: String, default: ''},
+    },
+
+    aiAnalysis: {
       type: Object,
       default: null,
     },
-    aiSuggestions: {
-      type: Object,
-      default: null,
-    },
-    aiLastEvaluated: {
+    aiAnalyzedOn: {
       type: Date,
       default: null,
     },
-
-    // --- REMOVED: Redundant fields for "Willing to Sell" ---
-    // The "status" field now handles this logic.
   },
   {
     timestamps: true,

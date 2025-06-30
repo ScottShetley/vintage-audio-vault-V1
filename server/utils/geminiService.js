@@ -44,6 +44,119 @@ const flashModel = genAI.getGenerativeModel ({
   safetySettings: DEFAULT_SAFETY_SETTINGS,
 });
 
+// --- VAV-UPDATE ---
+// New "uber" function for generating a complete analysis when a user adds a new item
+// to their collection. This is designed to populate the "Intelligent Summary" component.
+async function getAiFullAnalysisForCollectionItem (itemData) {
+  const {make, model, itemType, condition, notes, photoUrl} = itemData;
+
+  const prompt = `
+    You are a vintage audio expert, historian, and technician creating a comprehensive report for a user's collection item.
+    The user has provided the following information:
+    - Make: ${make}
+    - Model: ${model}
+    - Item Type: ${itemType}
+    - Stated Condition: "${condition}"
+    - User's Notes: "${notes || 'No notes provided.'}"
+    
+    You are also provided with one image of the item.
+
+    Your Task: Generate a complete analysis as a single JSON object. The report must include all of the following fields:
+
+    1. "summary": A compelling, single-sentence summary of the item's reputation and significance.
+    2. "detailedAnalysis": A detailed, multi-paragraph description covering the item's history, design philosophy, build quality, sound signature, and its place in the vintage audio market.
+    3. "valueInsight": An object containing a market valuation, with the following sub-fields:
+        - "productionDates": A string representing the manufacturing years (e.g., "1976-1980").
+        - "marketDesirability": A paragraph explaining how sought-after the item is, considering rarity, performance, and aesthetics.
+        - "estimatedValueUSD": A string representing the estimated market value range in USD (e.g., "$400 - $600").
+    4. "potentialIssues": A bulleted list of 3-5 common age-related issues or failure points for this specific model. Format this as a single string with each point starting with a hyphen and separated by a newline character (\\n).
+    5. "restorationTips": A bulleted list of 3-5 common restoration or enhancement tips for this model. Format this as a single string with each point starting with a hyphen and separated by a newline character (\\n).
+    6. "suggestedGear": An array of 3-5 suggested complementary vintage components (e.g., speakers, turntable). Each object in the array should have "make", "model", and a "reason" for the suggestion. Do not suggest another item of the same itemType as the input.
+    7. "disclaimer": A standard disclaimer stating that this is an AI-generated estimate for informational purposes.
+
+    Return ONLY the raw JSON object.`;
+
+  const schema = {
+    type: 'OBJECT',
+    properties: {
+      summary: {type: 'STRING'},
+      detailedAnalysis: {type: 'STRING'},
+      valueInsight: {
+        type: 'OBJECT',
+        properties: {
+          productionDates: {type: 'STRING'},
+          marketDesirability: {type: 'STRING'},
+          estimatedValueUSD: {type: 'STRING'},
+        },
+        required: [
+          'productionDates',
+          'marketDesirability',
+          'estimatedValueUSD',
+        ],
+      },
+      potentialIssues: {type: 'STRING'},
+      restorationTips: {type: 'STRING'},
+      suggestedGear: {
+        type: 'ARRAY',
+        items: {
+          type: 'OBJECT',
+          properties: {
+            make: {type: 'STRING'},
+            model: {type: 'STRING'},
+            reason: {type: 'STRING'},
+          },
+          required: ['make', 'model', 'reason'],
+        },
+      },
+      disclaimer: {type: 'STRING'},
+    },
+    required: [
+      'summary',
+      'detailedAnalysis',
+      'valueInsight',
+      'potentialIssues',
+      'restorationTips',
+      'suggestedGear',
+      'disclaimer',
+    ],
+  };
+
+  try {
+    const imagePart = await urlToBase64 (photoUrl);
+    const parts = [
+      {text: prompt},
+      imagePart ? {inlineData: imagePart} : {text: 'No image provided.'},
+    ];
+
+    const result = await proModel.generateContent ({
+      contents: [{role: 'user', parts: parts}],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: schema,
+        temperature: 0.6,
+      },
+    });
+    const responseText = result.response.text ();
+    return JSON.parse (responseText);
+  } catch (error) {
+    console.error ('Error in getAiFullAnalysisForCollectionItem:', error);
+    return {
+      error: `Gemini AI full analysis failed: ${error.message}`,
+      summary: 'AI analysis could not be completed.',
+      detailedAnalysis: 'An error occurred during generation. Please try again later.',
+      valueInsight: {
+        productionDates: 'N/A',
+        marketDesirability: 'N/A',
+        estimatedValueUSD: 'Error',
+      },
+      potentialIssues: 'N/A',
+      restorationTips: 'N/A',
+      suggestedGear: [],
+      disclaimer: 'An error occurred during AI analysis.',
+    };
+  }
+}
+
 // ===================================================================================
 //
 // ENHANCED "WILD FIND" ANALYSIS FUNCTION (SINGLE-STEP)
@@ -684,13 +797,15 @@ const deleteFromGcs = async (fileUrl, bucketName, storage) => {
 };
 
 module.exports = {
-  // Add the new function to the exports
+  // --- VAV-UPDATE ---
+  // Add the new uber function to the exports
+  getAiFullAnalysisForCollectionItem,
+  //
   getComprehensiveWildFindAnalysis,
-  // Keep all the old functions
   getVisualAnalysis,
   getFactualFeatures,
   getSynthesizedValuation,
-  analyzeAdText: analyzeAdTextAndReturnWithOriginal, // Use the wrapper
+  analyzeAdText: analyzeAdTextAndReturnWithOriginal,
   getAdPriceComparisonInsight,
   getAiValueInsight,
   getRelatedGearSuggestions,
