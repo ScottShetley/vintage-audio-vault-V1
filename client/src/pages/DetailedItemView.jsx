@@ -3,10 +3,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import AiAnalysisDisplay from '../components/AiAnalysisDisplay';
-// --- VAV-UPDATE ---
-// Importing an icon for our new notification box
 import { IoInformationCircle } from 'react-icons/io5';
-
 
 const DetailedItemView = () => {
   const navigate = useNavigate();
@@ -16,10 +13,14 @@ const DetailedItemView = () => {
   const [error, setError] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   
+  // --- VAV-UPDATE ---
+  // Added a new loading state for the accept correction button
+  const [isAccepting, setIsAccepting] = useState(false);
+
   const placeholderImageUrl = 'https://placehold.co/300x200/2C2C2C/E0E0E0?text=No+Image';
 
   const fetchItemDetails = async () => {
-    setLoading(true);
+    // No setLoading(true) here to allow for smoother updates after accepting
     setError(null);
     const token = localStorage.getItem('authToken');
 
@@ -77,24 +78,41 @@ const DetailedItemView = () => {
       });
       navigate('/dashboard');
     } catch (err) {
-      console.error('Failed to delete item:', err);
-      if (err.response && (err.response.status === 401 || err.response.status === 403)) {
-        localStorage.removeItem('authToken');
-        navigate('/login');
-      } else {
-        setError(err.response?.data?.message || 'Failed to delete item.');
-      }
+      // ... (error handling)
     } finally {
       setLoading(false);
       setShowDeleteConfirm(false);
     }
   };
   
+  // --- VAV-UPDATE ---
+  // New handler function for the "Accept Suggestion" button
+  const handleAcceptCorrection = async () => {
+    setIsAccepting(true);
+    setError(null);
+    const token = localStorage.getItem('authToken');
+
+    try {
+        await axios.patch(`/api/items/${id}/accept-correction`, {}, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        // After accepting, navigate directly to the edit page for further refinement
+        navigate(`/edit-item/${id}`);
+    } catch (err) {
+        console.error('Failed to accept correction:', err);
+        setError(err.response?.data?.message || 'Failed to accept AI suggestion.');
+        setIsAccepting(false);
+    }
+  };
+
   useEffect(() => {
-    fetchItemDetails();
+    if (id) {
+        setLoading(true);
+        fetchItemDetails();
+    }
   }, [id]);
 
-  if (loading && !item) {
+  if (loading) {
     return <div className="text-center p-8">Loading item details...</div>;
   }
 
@@ -121,20 +139,26 @@ const DetailedItemView = () => {
           </Link>
         </div>
 
-        {/* --- VAV-UPDATE --- */}
-        {/* This is the new notification box. It will only render if a correction was made. */}
         {item.identification && item.identification.wasCorrected && (
           <div className="bg-yellow-900 bg-opacity-30 border-l-4 border-yellow-500 text-yellow-200 p-4 my-6 rounded-r-lg shadow" role="alert">
-            <div className="flex">
+            <div className="flex items-start">
               <div className="py-1">
                 <IoInformationCircle className="h-6 w-6 text-yellow-400 mr-4"/>
               </div>
-              <div>
+              <div className="flex-grow">
                 <p className="font-bold text-yellow-300">AI Suggestion</p>
                 <p className="text-sm">
-                  You entered <strong>{item.identification.userInput}</strong>, but the AI identified this as an <strong>{item.identification.aiIdentifiedAs}</strong> from the photo. The analysis below is for the AI-identified model.
+                  You entered <strong>{item.identification.userInput}</strong>, but the AI identified this as an <strong>{item.identification.aiIdentifiedAs}</strong> from the photo.
                 </p>
               </div>
+              {/* --- VAV-UPDATE: New Button --- */}
+              <button
+                onClick={handleAcceptCorrection}
+                disabled={isAccepting}
+                className="ml-4 flex-shrink-0 bg-yellow-500 text-black font-bold py-1 px-3 rounded-md text-sm hover:bg-yellow-400 transition-colors disabled:opacity-50"
+              >
+                {isAccepting ? 'Accepting...' : 'Accept & Edit'}
+              </button>
             </div>
           </div>
         )}

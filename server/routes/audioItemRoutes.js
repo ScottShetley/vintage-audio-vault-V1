@@ -72,7 +72,6 @@ const uploadToGcsMiddleware = async (req, res, next) => {
 
 
 // --- Main Audio Item CRUD Routes ---
-// ... (GET, PUT, DELETE routes remain unchanged) ...
 
 // GET /api/items/discover
 router.get('/discover', async (req, res) => {
@@ -147,9 +146,6 @@ router.post('/', protect, uploadSingle, uploadToGcsMiddleware, async (req, res) 
         const aiIdentified = visualAnalysisArray[0];
         const aiIsConfident = aiIdentified.make !== "Unidentified Make" && aiIdentified.model !== "Model Not Clearly Identifiable";
         
-        // --- VAV-UPDATE ---
-        // Added .trim() to both sides of the comparison to eliminate errors
-        // caused by leading/trailing whitespace. This is the fix.
         const isDifferent = aiIdentified.make.toLowerCase().trim() !== userInput.make.toLowerCase().trim() || aiIdentified.model.toLowerCase().trim() !== userInput.model.toLowerCase().trim();
 
         if (aiIsConfident && isDifferent) {
@@ -227,6 +223,43 @@ router.put('/:id', protect, uploadMultiple, uploadToGcsMiddleware, async (req, r
     } catch (error) {
         res.status (500).json ({message: 'Server error while updating item.'});
     }
+});
+
+// --- VAV-UPDATE ---
+// New route to handle accepting the AI's identification suggestion.
+router.patch('/:id/accept-correction', protect, async (req, res) => {
+  try {
+    const item = await AudioItem.findById(req.params.id);
+
+    if (!item || item.user.toString() !== req.user.id) {
+      return res.status(404).json({ message: 'Item not found' });
+    }
+
+    if (!item.identification || !item.identification.wasCorrected) {
+      return res.status(400).json({ message: 'No correction to accept.' });
+    }
+
+    // Parse the corrected make and model from the stored string
+    const parts = item.identification.aiIdentifiedAs.split(' ');
+    const newMake = parts[0];
+    const newModel = parts.slice(1).join(' ');
+
+    // Update the main fields with the AI's data
+    item.make = newMake;
+    item.model = newModel;
+
+    // Mark the correction as handled
+    item.identification.wasCorrected = false;
+    item.identification.userInput = ''; // Clear out old data
+    item.identification.aiIdentifiedAs = '';
+
+    const updatedItem = await item.save();
+    res.json(updatedItem);
+
+  } catch (error) {
+    console.error("Error accepting AI correction:", error);
+    res.status(500).json({ message: 'Server error while accepting correction.', details: error.message });
+  }
 });
 
 
