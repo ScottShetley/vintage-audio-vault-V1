@@ -12,10 +12,9 @@ const EditItemPage = () => {
   const [model, setModel] = useState('');
   const [itemType, setItemType] = useState('Receiver');
   const [condition, setCondition] = useState('Mint');
-  // --- ADDED: State for new fields ---
   const [status, setStatus] = useState('Personal Collection');
   const [privacy, setPrivacy] = useState('Public');
-  // --- END ADDED ---
+  const [askingPrice, setAskingPrice] = useState(''); // <-- ADDED
   const [isFullyFunctional, setIsFullyFunctional] = useState(true);
   const [issuesDescription, setIssuesDescription] = useState('');
   const [notes, setNotes] = useState('');
@@ -55,10 +54,9 @@ const EditItemPage = () => {
         setModel(itemData.model || '');
         setItemType(itemData.itemType || 'Receiver');
         setCondition(itemData.condition || 'Mint');
-        // --- ADDED: Set state for new fields on load ---
         setStatus(itemData.status || 'Personal Collection');
         setPrivacy(itemData.privacy || 'Public');
-        // --- END ADDED ---
+        setAskingPrice(itemData.askingPrice || ''); // <-- ADDED
         setIsFullyFunctional(itemData.isFullyFunctional ?? true);
         setIssuesDescription(itemData.issuesDescription || '');
         setNotes(itemData.notes || '');
@@ -102,10 +100,12 @@ const EditItemPage = () => {
     formData.append('model', model);
     formData.append('itemType', itemType);
     formData.append('condition', condition);
-    // --- ADDED: Append new fields to form data ---
     formData.append('status', status);
     formData.append('privacy', privacy);
-    // --- END ADDED ---
+    // Conditionally append askingPrice only if status is 'For Sale'
+    if (status === 'For Sale') {
+        formData.append('askingPrice', askingPrice); // <-- ADDED
+    }
     formData.append('isFullyFunctional', isFullyFunctional);
     formData.append('issuesDescription', issuesDescription);
     formData.append('notes', notes);
@@ -114,12 +114,10 @@ const EditItemPage = () => {
       formData.append('photos', newPhotos[i]);
     }
     
-    existingPhotoUrls.forEach(url => {
-        formData.append('existingImageUrls[]', url);
-    });
+    formData.append('existingImageUrls', JSON.stringify(existingPhotoUrls));
 
     try {
-      const response = await axios.put(`http://localhost:5000/api/items/${id}`, formData, {
+      await axios.put(`http://localhost:5000/api/items/${id}`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
           Authorization: `Bearer ${token}`,
@@ -194,7 +192,6 @@ const EditItemPage = () => {
           </div>
         </div>
         
-        {/* --- ADDED: Status and Privacy Dropdowns --- */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
                 <label htmlFor="status" className={labelClass}>Status</label>
@@ -212,6 +209,23 @@ const EditItemPage = () => {
                 </select>
             </div>
         </div>
+        
+        {/* --- ADDED: Conditional Asking Price Input --- */}
+        {status === 'For Sale' && (
+            <div>
+                <label htmlFor="askingPrice" className={labelClass}>Asking Price ($)</label>
+                <input 
+                    type="number" 
+                    id="askingPrice" 
+                    value={askingPrice} 
+                    onChange={(e) => setAskingPrice(e.target.value)} 
+                    className={inputClass}
+                    placeholder="e.g., 450.00"
+                    min="0"
+                    step="0.01"
+                />
+            </div>
+        )}
         {/* --- END ADDED --- */}
 
         <div>

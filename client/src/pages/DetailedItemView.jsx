@@ -3,57 +3,66 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import AiAnalysisDisplay from '../components/AiAnalysisDisplay';
-import { IoInformationCircle } from 'react-icons/io5';
+import { IoInformationCircle, IoPricetag } from 'react-icons/io5';
 
 const DetailedItemView = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const [item, setItem] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null); // <-- NEW: State for logged-in user
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  
-  // --- VAV-UPDATE ---
-  // Added a new loading state for the accept correction button
   const [isAccepting, setIsAccepting] = useState(false);
 
   const placeholderImageUrl = 'https://placehold.co/300x200/2C2C2C/E0E0E0?text=No+Image';
 
-  const fetchItemDetails = async () => {
-    // No setLoading(true) here to allow for smoother updates after accepting
-    setError(null);
-    const token = localStorage.getItem('authToken');
+  useEffect(() => {
+    const fetchAllDetails = async () => {
+      setLoading(true);
+      setError(null);
+      const token = localStorage.getItem('authToken');
 
-    if (!token) {
-      setError('Authorization token not found. Please login.');
-      setLoading(false);
-      navigate('/login');
-      return;
-    }
-
-    try {
-      const response = await axios.get(`/api/items/${id}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      setItem(response.data);
-    } catch (err) {
-      console.error('Failed to load item details:', err);
-      if (err.response && (err.response.status === 401 || err.response.status === 403)) {
-        localStorage.removeItem('authToken');
+      if (!token) {
+        setLoading(false);
         navigate('/login');
-      } else if (err.response && err.response.status === 404) {
-        setError('Item not found.');
-      } else {
-        setError(err.response?.data?.message || 'Failed to load item details.');
+        return;
       }
-    } finally {
-      setLoading(false);
+
+      const headers = { Authorization: `Bearer ${token}` };
+
+      try {
+        // <-- NEW: Fetch both item and current user data concurrently
+        const [itemResponse, userResponse] = await Promise.all([
+          axios.get(`/api/items/${id}`, { headers }),
+          axios.get('/api/users/me', { headers })
+        ]);
+
+        setItem(itemResponse.data);
+        setCurrentUser(userResponse.data);
+
+      } catch (err) {
+        console.error('Failed to load details:', err);
+        if (err.response && (err.response.status === 401 || err.response.status === 403)) {
+          localStorage.removeItem('authToken');
+          navigate('/login');
+        } else if (err.response && err.response.status === 404) {
+          setError('Item not found.');
+        } else {
+          setError(err.response?.data?.message || 'Failed to load details.');
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (id) {
+      fetchAllDetails();
     }
-  };
+  }, [id, navigate]);
 
   const handleDelete = async () => {
+    // ... (This function remains unchanged)
     if (!showDeleteConfirm) {
       setShowDeleteConfirm(true);
       return;
@@ -85,9 +94,8 @@ const DetailedItemView = () => {
     }
   };
   
-  // --- VAV-UPDATE ---
-  // New handler function for the "Accept Suggestion" button
   const handleAcceptCorrection = async () => {
+    // ... (This function remains unchanged)
     setIsAccepting(true);
     setError(null);
     const token = localStorage.getItem('authToken');
@@ -96,7 +104,6 @@ const DetailedItemView = () => {
         await axios.patch(`/api/items/${id}/accept-correction`, {}, {
             headers: { Authorization: `Bearer ${token}` }
         });
-        // After accepting, navigate directly to the edit page for further refinement
         navigate(`/edit-item/${id}`);
     } catch (err) {
         console.error('Failed to accept correction:', err);
@@ -104,13 +111,6 @@ const DetailedItemView = () => {
         setIsAccepting(false);
     }
   };
-
-  useEffect(() => {
-    if (id) {
-        setLoading(true);
-        fetchItemDetails();
-    }
-  }, [id]);
 
   if (loading) {
     return <div className="text-center p-8">Loading item details...</div>;
@@ -124,22 +124,38 @@ const DetailedItemView = () => {
     return <div className="text-center p-8">Item not found.</div>;
   }
 
+  // <-- NEW: Simple boolean flag to check for ownership
+  const isOwner = currentUser && item.user && currentUser._id === item.user._id;
+
   return (
     <div className="w-full max-w-4xl mx-auto p-4">
       <div className="bg-vav-content-card shadow-xl rounded-lg p-6 md:p-8">
-        <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+        <div className="flex flex-col md:flex-row justify-between items-start mb-2 gap-4">
           <h1 className="text-3xl font-serif text-vav-accent-primary text-center md:text-left">
             {item.make} {item.model}
           </h1>
           <Link
-            to="/dashboard"
-            className="text-vav-accent-primary hover:text-vav-accent-secondary transition-colors"
+            to="/marketplace"
+            className="text-vav-accent-primary hover:text-vav-accent-secondary transition-colors flex-shrink-0"
           >
-            &larr; Back to Dashboard
+            &larr; Back to Marketplace
           </Link>
         </div>
 
-        {item.identification && item.identification.wasCorrected && (
+        {/* --- NEW: FOR SALE STATUS DISPLAY --- */}
+        {item.status === 'For Sale' && (
+          <div className="mb-6">
+            <div className="inline-flex items-center bg-green-800 bg-opacity-50 text-green-300 border border-green-700 rounded-full px-4 py-2">
+              <IoPricetag className="mr-2" />
+              <span className="font-bold">For Sale: ${item.askingPrice?.toFixed(2)}</span>
+            </div>
+          </div>
+        )}
+        {/* --- END NEW --- */}
+
+
+        {/* --- VAV-UPDATE: AI Suggestion notice, logic is the same but wrapped in owner check --- */}
+        {isOwner && item.identification && item.identification.wasCorrected && (
           <div className="bg-yellow-900 bg-opacity-30 border-l-4 border-yellow-500 text-yellow-200 p-4 my-6 rounded-r-lg shadow" role="alert">
             <div className="flex items-start">
               <div className="py-1">
@@ -151,7 +167,6 @@ const DetailedItemView = () => {
                   You entered <strong>{item.identification.userInput}</strong>, but the AI identified this as an <strong>{item.identification.aiIdentifiedAs}</strong> from the photo.
                 </p>
               </div>
-              {/* --- VAV-UPDATE: New Button --- */}
               <button
                 onClick={handleAcceptCorrection}
                 disabled={isAccepting}
@@ -164,7 +179,6 @@ const DetailedItemView = () => {
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 mb-8 text-sm">
-          {/* ... (rest of the item details display remains the same) ... */}
           <div className="md:col-span-2 mb-4">
             <h3 className="text-xl font-serif text-vav-text-secondary mb-3">Photo</h3>
             <img
@@ -183,6 +197,10 @@ const DetailedItemView = () => {
             <p className="text-vav-text font-medium">{item.condition}</p>
           </div>
           <div>
+            <p className="text-vav-text-secondary">Owner:</p>
+            <p className="text-vav-text font-medium">{item.user.username}</p>
+          </div>
+          <div>
             <p className="text-vav-text-secondary">Fully Functional:</p>
             <p className="text-vav-text font-medium">{item.isFullyFunctional ? 'Yes' : 'No'}</p>
           </div>
@@ -192,7 +210,8 @@ const DetailedItemView = () => {
               <p className="text-vav-text font-medium whitespace-pre-wrap">{item.issuesDescription}</p>
             </div>
           )}
-          {item.notes && (
+          {/* --- UPDATED LOGIC: NOTES ARE NOW OWNER-ONLY --- */}
+          {isOwner && item.notes && (
             <div className="md:col-span-2 mt-4">
               <h3 className="text-vav-text-secondary text-base font-medium mb-1">Notes:</h3>
               <p className="text-vav-text whitespace-pre-wrap">{item.notes}</p>
@@ -211,20 +230,23 @@ const DetailedItemView = () => {
           )}
         </div>
 
-        <div className="flex justify-center gap-4 mt-8 pt-6 border-t border-vav-text-secondary/50">
-          <Link
-            to={`/edit-item/${item._id}`}
-            className="bg-vav-accent-primary text-vav-background font-semibold py-2 px-6 rounded-md shadow-md hover:bg-vav-accent-secondary"
-          >
-            Edit Item
-          </Link>
-          <button
-            onClick={() => setShowDeleteConfirm(true)}
-            className="bg-red-700 text-white font-semibold py-2 px-6 rounded-md shadow-md hover:bg-red-800"
-          >
-            Delete Item
-          </button>
-        </div>
+        {/* --- UPDATED LOGIC: EDIT/DELETE BUTTONS ARE NOW OWNER-ONLY --- */}
+        {isOwner && (
+          <div className="flex justify-center gap-4 mt-8 pt-6 border-t border-vav-text-secondary/50">
+            <Link
+              to={`/edit-item/${item._id}`}
+              className="bg-vav-accent-primary text-vav-background font-semibold py-2 px-6 rounded-md shadow-md hover:bg-vav-accent-secondary"
+            >
+              Edit Item
+            </Link>
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="bg-red-700 text-white font-semibold py-2 px-6 rounded-md shadow-md hover:bg-red-800"
+            >
+              Delete Item
+            </button>
+          </div>
+        )}
 
         {showDeleteConfirm && (
             <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
