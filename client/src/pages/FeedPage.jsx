@@ -13,30 +13,46 @@ const FeedPage = () => {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
 
-  const fetchFeedItems = useCallback(async (currentPage) => {
-    setLoading(true);
+  // --- UPDATED LOGIC: The fetch function now takes the page number directly ---
+  const fetchFeedItems = useCallback(async (pageToFetch) => {
+    // Only set loading to true if it's the first page load
+    if (pageToFetch === 1) {
+        setLoading(true);
+    }
     setError(null);
     const token = localStorage.getItem('authToken');
 
     try {
       const { data } = await axios.get(`/api/users/feed`, {
         headers: { Authorization: `Bearer ${token}` },
-        params: { page: currentPage, limit: FEED_PAGE_LIMIT },
+        params: { page: pageToFetch, limit: FEED_PAGE_LIMIT },
       });
 
       if (data.length > 0) {
-        // Normalize data for the ItemCard component
         const normalizedItems = data.map(item => ({
           id: item._id,
           title: `${item.make} ${item.model}`,
-          imageUrl: item.photoUrls?.[0], // Assumes photoUrls is an array
-          tag: 'My Collection', // For consistency, though we could create a new tag
+          imageUrl: item.photoUrls?.[0],
+          tag: 'My Collection',
           detailPath: `/item/${item._id}`,
           createdAt: item.createdAt,
           userId: item.user?._id,
           username: item.user?.username,
         }));
-        setItems(prevItems => [...prevItems, ...normalizedItems]);
+
+        // --- UPDATED LOGIC ---
+        // Replace items on page 1, append for subsequent pages.
+        // Also ensure no duplicates are added.
+        setItems(prevItems => {
+            const existingIds = new Set(prevItems.map(i => i.id));
+            const newItems = normalizedItems.filter(i => !existingIds.has(i.id));
+
+            if (pageToFetch === 1) {
+                return normalizedItems; // Replace
+            } else {
+                return [...prevItems, ...newItems]; // Append
+            }
+        });
         setHasMore(data.length === FEED_PAGE_LIMIT);
       } else {
         setHasMore(false);
@@ -54,9 +70,11 @@ const FeedPage = () => {
     }
   }, [navigate]);
 
+  // Initial data load
   useEffect(() => {
     fetchFeedItems(1);
   }, [fetchFeedItems]);
+
 
   const handleLoadMore = () => {
     const nextPage = page + 1;
