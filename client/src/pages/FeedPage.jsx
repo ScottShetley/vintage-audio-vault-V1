@@ -1,3 +1,4 @@
+// client/src/pages/FeedPage.jsx (Final Correct Version)
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
@@ -13,11 +14,9 @@ const FeedPage = () => {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
 
-  // --- UPDATED LOGIC: The fetch function now takes the page number directly ---
   const fetchFeedItems = useCallback(async (pageToFetch) => {
-    // Only set loading to true if it's the first page load
     if (pageToFetch === 1) {
-        setLoading(true);
+      setLoading(true);
     }
     setError(null);
     const token = localStorage.getItem('authToken');
@@ -28,30 +27,17 @@ const FeedPage = () => {
         params: { page: pageToFetch, limit: FEED_PAGE_LIMIT },
       });
 
+      // --- UPDATED LOGIC ---
+      // No more normalization needed here! The server has already prepared the data.
       if (data.length > 0) {
-        const normalizedItems = data.map(item => ({
-          id: item._id,
-          title: `${item.make} ${item.model}`,
-          imageUrl: item.photoUrls?.[0],
-          tag: 'My Collection',
-          detailPath: `/item/${item._id}`,
-          createdAt: item.createdAt,
-          userId: item.user?._id,
-          username: item.user?.username,
-        }));
-
-        // --- UPDATED LOGIC ---
-        // Replace items on page 1, append for subsequent pages.
-        // Also ensure no duplicates are added.
         setItems(prevItems => {
-            const existingIds = new Set(prevItems.map(i => i.id));
-            const newItems = normalizedItems.filter(i => !existingIds.has(i.id));
-
-            if (pageToFetch === 1) {
-                return normalizedItems; // Replace
-            } else {
-                return [...prevItems, ...newItems]; // Append
-            }
+          if (pageToFetch === 1) {
+            return data; // Replace items for the first page
+          }
+          // For subsequent pages, filter out any potential duplicates before appending
+          const existingIds = new Set(prevItems.map(i => i.id));
+          const newItems = data.filter(i => !existingIds.has(i.id));
+          return [...prevItems, ...newItems];
         });
         setHasMore(data.length === FEED_PAGE_LIMIT);
       } else {
@@ -66,15 +52,15 @@ const FeedPage = () => {
         setError(err.response?.data?.message || 'Failed to load your feed. Please try again.');
       }
     } finally {
-      setLoading(false);
+      if (pageToFetch === 1) {
+        setLoading(false);
+      }
     }
   }, [navigate]);
 
-  // Initial data load
   useEffect(() => {
     fetchFeedItems(1);
   }, [fetchFeedItems]);
-
 
   const handleLoadMore = () => {
     const nextPage = page + 1;

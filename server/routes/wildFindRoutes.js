@@ -1,8 +1,7 @@
-// server/routes/wildFindRoutes.js
+// server/routes/wildFindRoutes.js (Final Version)
 const express = require ('express');
 const router = express.Router ();
 const {protect} = require ('../middleware/authMiddleware');
-// *** THE FIX: Changed 'WildFind' to 'wildFind' to match the actual file name ***
 const WildFind = require ('../models/wildFind');
 
 // GET all saved finds for the user
@@ -18,11 +17,15 @@ router.get ('/', protect, async (req, res) => {
   }
 });
 
+// --- MODIFIED ROUTE: REMOVED OWNERSHIP CHECK FOR PUBLIC VIEWING ---
 // GET a single saved find by its ID
 router.get ('/:id', protect, async (req, res) => {
   try {
     const find = await WildFind.findById (req.params.id);
-    if (!find || find.userId.toString () !== req.user.id) {
+
+    // The ownership check has been removed to allow public viewing from the feed.
+    // We only check if the find exists now.
+    if (!find) {
       return res.status (404).json ({message: 'Find not found.'});
     }
     res.status (200).json (find);

@@ -149,7 +149,8 @@ function App() {
             <Route path="/edit-item/:id" element={<EditItemPage />} />
             <Route path="/wild-find" element={<WildFindPage />} />
             <Route path="/saved-finds" element={<SavedFindsPage />} />
-            <Route path="/wild-find-details/:id" element={<SavedFindDetailsPage />} />
+            {/* --- UPDATED ROUTE PATH --- */}
+            <Route path="/saved-finds/:id" element={<SavedFindDetailsPage />} />
             <Route path="/ad-analyzer" element={<AdAnalyzerPage />} />
           </Route>
 

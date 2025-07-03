@@ -44,4 +44,5 @@ const WildFindSchema = new mongoose.Schema (
   }
 );
 
-module.exports = mongoose.model ('WildFind', WildFindSchema);
+module.exports =
+  mongoose.models.WildFind || mongoose.model ('WildFind', WildFindSchema);
