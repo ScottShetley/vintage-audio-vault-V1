@@ -1,17 +1,8 @@
 // client/src/pages/DashboardPage.jsx
+
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
-
-const getFindTitle = (find) => {
-  if (find.findType === 'Ad Analysis' && find.adAnalysis) {
-      return `${find.adAnalysis.identifiedMake} ${find.adAnalysis.identifiedModel}`;
-  }
-  if (find.findType === 'Wild Find' && find.analysis) {
-      return find.analysis.identifiedItem;
-  }
-  return 'Unknown Item';
-};
 
 const tagColors = {
   'My Collection': 'bg-purple-600',
@@ -27,56 +18,18 @@ const DashboardPage = ({ token }) => {
   const [activeTab, setActiveTab] = useState('All');
 
   useEffect(() => {
-    const fetchAllData = async () => {
+    const fetchDashboardData = async () => {
       setLoading(true);
       setError(null);
       
       try {
-        const personalItemsPromise = axios.get('/api/items', {
+        // Single, efficient API call to the new dashboard endpoint
+        const response = await axios.get('/api/users/dashboard', {
           headers: { Authorization: `Bearer ${token}` },
         });
-        const savedFindsPromise = axios.get('/api/wild-finds', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
         
-        const [personalItemsResponse, savedFindsResponse] = await Promise.all([
-          personalItemsPromise,
-          savedFindsPromise,
-        ]);
-
-        const placeholderImageUrl = 'https://placehold.co/150x150/2C2C2C/E0E0E0?text=No+Image';
-
-        const normalizedPersonalItems = personalItemsResponse.data.map(item => ({
-          id: item._id,
-          title: `${item.make} ${item.model}`,
-          imageUrl: item.photoUrls?.[0] || placeholderImageUrl,
-          tag: 'My Collection',
-          detailPath: `/item/${item._id}`,
-          createdAt: item.createdAt,
-          userId: item.user?._id,
-          username: item.user?.username,
-        }));
-        
-        const normalizedSavedFinds = savedFindsResponse.data.map(find => ({
-          id: find._id,
-          title: getFindTitle(find),
-          imageUrl: find.imageUrl || placeholderImageUrl,
-          tag: find.findType,
-          detailPath: `/wild-find-details/${find._id}`,
-          createdAt: find.createdAt,
-          userId: find.user?._id,
-          username: find.user?.username,
-        }));
-
-        let combined = [...normalizedPersonalItems, ...normalizedSavedFinds];
-        
-        combined.sort((a, b) => {
-          if (a.tag === 'My Collection' && b.tag !== 'My Collection') return -1;
-          if (a.tag !== 'My Collection' && b.tag === 'My Collection') return 1;
-          return new Date(b.createdAt) - new Date(a.createdAt);
-        });
-
-        setAllItems(combined);
+        // No more frontend normalization needed! The backend provides the data in the correct format.
+        setAllItems(response.data);
 
       } catch (err) {
         console.error('Failed to load dashboard data:', err);
@@ -92,7 +45,7 @@ const DashboardPage = ({ token }) => {
     };
 
     if (token) {
-      fetchAllData();
+      fetchDashboardData();
     } else {
       setAllItems([]);
       setLoading(false);
@@ -194,6 +147,7 @@ const DashboardPage = ({ token }) => {
                 </h3>
                 {item.username && item.userId && (
                   <p className="text-xs text-center text-vav-text-secondary mt-1 mb-2">
+                     {/* The link to the user's own profile is correctly rendered */}
                     by <Link to={`/profile/${item.userId}`} className="hover:underline hover:text-vav-accent-secondary transition-colors">{item.username}</Link>
                   </p>
                 )}
