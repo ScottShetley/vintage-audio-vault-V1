@@ -76,11 +76,11 @@ router.get('/discover', protect, async (req, res) => {
     const skip = (page - 1) * limit;
 
     const audioItemsPromise = AudioItem.find({ privacy: 'Public' })
-      .populate('user', 'username _id') // <-- Added _id to population
+      .populate('user', 'username _id')
       .lean();
 
     const wildFindsPromise = WildFind.find({})
-      .populate('userId', 'username _id') // <-- Added _id to population
+      .populate('userId', 'username _id')
       .lean();
 
     const [audioItems, wildFinds] = await Promise.all([
@@ -96,7 +96,6 @@ router.get('/discover', protect, async (req, res) => {
       detailPath: `/item/${item._id}`,
       createdAt: item.createdAt,
       username: item.user?.username,
-      // --- FINAL FIX: Add the missing userId ---
       userId: item.user?._id,
     }));
 
@@ -116,7 +115,6 @@ router.get('/discover', protect, async (req, res) => {
         detailPath: `/saved-finds/${find._id}`,
         createdAt: find.createdAt,
         username: find.userId?.username,
-        // --- FINAL FIX: Add the missing userId ---
         userId: find.userId?._id,
       };
     });
@@ -272,6 +270,9 @@ router.post(
 );
 
 // PUT /api/items/:id
+// NOTE: This route's logic was already correct. It properly uses `uploadMultiple` 
+// and combines the `existingImageUrls` with the newly uploaded URLs (`req.gcsUrls`).
+// The bug was that the frontend was not sending the `existingImageUrls` field.
 router.put(
   '/:id',
   protect,

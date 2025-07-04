@@ -3,19 +3,18 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import AiAnalysisDisplay from '../components/AiAnalysisDisplay';
+import ImageCarousel from '../components/ImageCarousel'; // <-- IMPORT the new component
 import { IoInformationCircle, IoPricetag } from 'react-icons/io5';
 
 const DetailedItemView = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const [item, setItem] = useState(null);
-  const [currentUser, setCurrentUser] = useState(null); // <-- NEW: State for logged-in user
+  const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isAccepting, setIsAccepting] = useState(false);
-
-  const placeholderImageUrl = 'https://placehold.co/300x200/2C2C2C/E0E0E0?text=No+Image';
 
   useEffect(() => {
     const fetchAllDetails = async () => {
@@ -32,7 +31,6 @@ const DetailedItemView = () => {
       const headers = { Authorization: `Bearer ${token}` };
 
       try {
-        // <-- NEW: Fetch both item and current user data concurrently
         const [itemResponse, userResponse] = await Promise.all([
           axios.get(`/api/items/${id}`, { headers }),
           axios.get('/api/users/me', { headers })
@@ -62,7 +60,6 @@ const DetailedItemView = () => {
   }, [id, navigate]);
 
   const handleDelete = async () => {
-    // ... (This function remains unchanged)
     if (!showDeleteConfirm) {
       setShowDeleteConfirm(true);
       return;
@@ -87,7 +84,7 @@ const DetailedItemView = () => {
       });
       navigate('/dashboard');
     } catch (err) {
-      // ... (error handling)
+        setError(err.response?.data?.message || 'Failed to delete item.');
     } finally {
       setLoading(false);
       setShowDeleteConfirm(false);
@@ -95,7 +92,6 @@ const DetailedItemView = () => {
   };
   
   const handleAcceptCorrection = async () => {
-    // ... (This function remains unchanged)
     setIsAccepting(true);
     setError(null);
     const token = localStorage.getItem('authToken');
@@ -124,7 +120,6 @@ const DetailedItemView = () => {
     return <div className="text-center p-8">Item not found.</div>;
   }
 
-  // <-- NEW: Simple boolean flag to check for ownership
   const isOwner = currentUser && item.user && currentUser._id === item.user._id;
 
   return (
@@ -134,15 +129,15 @@ const DetailedItemView = () => {
           <h1 className="text-3xl font-serif text-vav-accent-primary text-center md:text-left">
             {item.make} {item.model}
           </h1>
+          {/* VAV-UPDATE: Changed link to go to /discover instead of /marketplace */}
           <Link
-            to="/marketplace"
+            to="/discover"
             className="text-vav-accent-primary hover:text-vav-accent-secondary transition-colors flex-shrink-0"
           >
-            &larr; Back to Marketplace
+            &larr; Back to Discover
           </Link>
         </div>
 
-        {/* --- NEW: FOR SALE STATUS DISPLAY --- */}
         {item.status === 'For Sale' && (
           <div className="mb-6">
             <div className="inline-flex items-center bg-green-800 bg-opacity-50 text-green-300 border border-green-700 rounded-full px-4 py-2">
@@ -151,10 +146,7 @@ const DetailedItemView = () => {
             </div>
           </div>
         )}
-        {/* --- END NEW --- */}
 
-
-        {/* --- VAV-UPDATE: AI Suggestion notice, logic is the same but wrapped in owner check --- */}
         {isOwner && item.identification && item.identification.wasCorrected && (
           <div className="bg-yellow-900 bg-opacity-30 border-l-4 border-yellow-500 text-yellow-200 p-4 my-6 rounded-r-lg shadow" role="alert">
             <div className="flex items-start">
@@ -180,13 +172,10 @@ const DetailedItemView = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 mb-8 text-sm">
           <div className="md:col-span-2 mb-4">
-            <h3 className="text-xl font-serif text-vav-text-secondary mb-3">Photo</h3>
-            <img
-              src={item.photoUrls && item.photoUrls.length > 0 ? item.photoUrls[0] : placeholderImageUrl}
-              alt={`${item.make} ${item.model}`}
-              className="w-full h-auto max-h-96 object-contain rounded-md shadow-sm"
-              onError={(e) => { e.target.onerror = null; e.target.src = placeholderImageUrl; }}
-            />
+            <h3 className="text-xl font-serif text-vav-text-secondary mb-3">Photo(s)</h3>
+            {/* --- THIS IS THE CHANGE --- */}
+            {/* The old img tag is replaced with our new ImageCarousel component */}
+            <ImageCarousel photos={item.photoUrls} />
           </div>
           <div>
             <p className="text-vav-text-secondary">Item Type:</p>
@@ -210,7 +199,6 @@ const DetailedItemView = () => {
               <p className="text-vav-text font-medium whitespace-pre-wrap">{item.issuesDescription}</p>
             </div>
           )}
-          {/* --- UPDATED LOGIC: NOTES ARE NOW OWNER-ONLY --- */}
           {isOwner && item.notes && (
             <div className="md:col-span-2 mt-4">
               <h3 className="text-vav-text-secondary text-base font-medium mb-1">Notes:</h3>
@@ -230,7 +218,6 @@ const DetailedItemView = () => {
           )}
         </div>
 
-        {/* --- UPDATED LOGIC: EDIT/DELETE BUTTONS ARE NOW OWNER-ONLY --- */}
         {isOwner && (
           <div className="flex justify-center gap-4 mt-8 pt-6 border-t border-vav-text-secondary/50">
             <Link

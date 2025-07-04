@@ -14,7 +14,7 @@ const EditItemPage = () => {
   const [condition, setCondition] = useState('Mint');
   const [status, setStatus] = useState('Personal Collection');
   const [privacy, setPrivacy] = useState('Public');
-  const [askingPrice, setAskingPrice] = useState(''); // <-- ADDED
+  const [askingPrice, setAskingPrice] = useState('');
   const [isFullyFunctional, setIsFullyFunctional] = useState(true);
   const [issuesDescription, setIssuesDescription] = useState('');
   const [notes, setNotes] = useState('');
@@ -43,7 +43,7 @@ const EditItemPage = () => {
       }
 
       try {
-        const response = await axios.get(`http://localhost:5000/api/items/${id}`, {
+        const response = await axios.get(`/api/items/${id}`, { // Using relative path for proxy
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -56,7 +56,7 @@ const EditItemPage = () => {
         setCondition(itemData.condition || 'Mint');
         setStatus(itemData.status || 'Personal Collection');
         setPrivacy(itemData.privacy || 'Public');
-        setAskingPrice(itemData.askingPrice || ''); // <-- ADDED
+        setAskingPrice(itemData.askingPrice || '');
         setIsFullyFunctional(itemData.isFullyFunctional ?? true);
         setIssuesDescription(itemData.issuesDescription || '');
         setNotes(itemData.notes || '');
@@ -102,9 +102,9 @@ const EditItemPage = () => {
     formData.append('condition', condition);
     formData.append('status', status);
     formData.append('privacy', privacy);
-    // Conditionally append askingPrice only if status is 'For Sale'
+    
     if (status === 'For Sale') {
-        formData.append('askingPrice', askingPrice); // <-- ADDED
+        formData.append('askingPrice', askingPrice);
     }
     formData.append('isFullyFunctional', isFullyFunctional);
     formData.append('issuesDescription', issuesDescription);
@@ -114,10 +114,12 @@ const EditItemPage = () => {
       formData.append('photos', newPhotos[i]);
     }
     
+    // --- THIS IS THE FIX ---
+    // Send the array of remaining existing photos so the backend knows which ones to keep.
     formData.append('existingImageUrls', JSON.stringify(existingPhotoUrls));
 
     try {
-      await axios.put(`http://localhost:5000/api/items/${id}`, formData, {
+      await axios.put(`/api/items/${id}`, formData, { // Using relative path for proxy
         headers: {
           'Content-Type': 'multipart/form-data',
           Authorization: `Bearer ${token}`,
@@ -210,7 +212,6 @@ const EditItemPage = () => {
             </div>
         </div>
         
-        {/* --- ADDED: Conditional Asking Price Input --- */}
         {status === 'For Sale' && (
             <div>
                 <label htmlFor="askingPrice" className={labelClass}>Asking Price ($)</label>
@@ -226,7 +227,6 @@ const EditItemPage = () => {
                 />
             </div>
         )}
-        {/* --- END ADDED --- */}
 
         <div>
           <div className="flex items-center">
