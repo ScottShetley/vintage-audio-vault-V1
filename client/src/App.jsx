@@ -15,7 +15,7 @@ import WildFindPage from './pages/WildFindPage';
 import AdAnalyzerPage from './pages/AdAnalyzerPage';
 import LandingPage from './pages/LandingPage';
 import InstructionsPage from './pages/InstructionsPage';
-import MarketplacePage from './pages/MarketplacePage';
+import DiscoverPage from './pages/DiscoverPage'; // <-- UPDATED IMPORT
 import SavedFindsPage from './pages/SavedFindsPage';
 import SavedFindDetailsPage from './pages/SavedFindDetailsPage';
 import ProfilePage from './pages/ProfilePage';
@@ -89,13 +89,13 @@ function App() {
           {token ? (
             // Logged IN Links
             <>
-              <li><Link to="/marketplace" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Marketplace</Link></li>
+              {/* --- UPDATED LINK --- */}
+              <li><Link to="/discover" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Discover</Link></li>
               <li><Link to="/feed" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Feed</Link></li>
               <li><Link to="/dashboard" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Dashboard</Link></li>
               <li><Link to="/wild-find" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Wild Find</Link></li>
               <li><Link to="/ad-analyzer" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Ad Analyzer</Link></li>
               
-              {/* --- MODIFIED: User account dropdown button now shows username --- */}
               {currentUser && (
                 <li className="relative" ref={dropdownRef}>
                   <button onClick={() => setIsDropdownOpen(!isDropdownOpen)} className="flex items-center gap-2 bg-vav-accent-primary hover:bg-vav-accent-secondary text-white font-bold py-2 px-4 rounded transition-colors">
@@ -106,7 +106,6 @@ function App() {
                   </button>
                   {isDropdownOpen && (
                     <div className="absolute right-0 mt-2 w-48 bg-vav-content-card rounded-md shadow-lg py-1 z-10">
-                      {/* --- ADDED: Link to user's own profile --- */}
                       <Link to={`/profile/${currentUser._id}`} onClick={() => setIsDropdownOpen(false)} className="block px-4 py-2 text-sm text-vav-text hover:bg-vav-background-alt font-semibold">My Profile</Link>
                       <Link to="/saved-finds" onClick={() => setIsDropdownOpen(false)} className="block px-4 py-2 text-sm text-vav-text hover:bg-vav-background-alt">Saved Finds</Link>
                       <Link to="/instructions" onClick={() => setIsDropdownOpen(false)} className="block px-4 py-2 text-sm text-vav-text hover:bg-vav-background-alt">Instructions</Link>
@@ -121,7 +120,8 @@ function App() {
           ) : (
             // Logged OUT Links
             <>
-              <li><Link to="/marketplace" className="text-lg font-bold text-vav-accent-primary hover:text-vav-text transition-colors">Marketplace</Link></li>
+              {/* --- UPDATED LINK --- */}
+              <li><Link to="/discover" className="text-lg font-bold text-vav-accent-primary hover:text-vav-text transition-colors">Discover</Link></li>
               <li><Link to="/instructions" className="text-lg font-bold text-vav-accent-primary hover:text-vav-text transition-colors">Instructions</Link></li>
               <li><Link to="/login" className="text-lg font-bold text-vav-accent-primary hover:text-vav-text transition-colors">Login</Link></li>
               <li><Link to="/signup" className="text-lg font-bold text-vav-accent-primary hover:text-vav-text transition-colors">Sign Up</Link></li>
@@ -137,7 +137,8 @@ function App() {
           <Route path="/instructions" element={<InstructionsPage />} />
           <Route path="/login" element={<LoginPage setToken={setToken} />} />
           <Route path="/signup" element={<SignupPage setToken={setToken} />} />
-          <Route path="/marketplace" element={<MarketplacePage />} />
+          {/* --- UPDATED ROUTE --- */}
+          <Route path="/discover" element={<DiscoverPage />} />
           <Route path="/profile/:userId" element={<ProfilePage />} />
           
           {/* Protected Routes */}
@@ -149,7 +150,6 @@ function App() {
             <Route path="/edit-item/:id" element={<EditItemPage />} />
             <Route path="/wild-find" element={<WildFindPage />} />
             <Route path="/saved-finds" element={<SavedFindsPage />} />
-            {/* --- UPDATED ROUTE PATH --- */}
             <Route path="/saved-finds/:id" element={<SavedFindDetailsPage />} />
             <Route path="/ad-analyzer" element={<AdAnalyzerPage />} />
           </Route>
