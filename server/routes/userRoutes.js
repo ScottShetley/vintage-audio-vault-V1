@@ -6,14 +6,14 @@ const mongoose = require('mongoose');
 const { protect } = require('../middleware/authMiddleware');
 const User = require('../models/User');
 const AudioItem = require('../models/AudioItem');
-const WildFind = require('../models/WildFind');
+const WildFind = require('../models/wildFind'); // <-- CORRECTED CASING
 
 // Unchanged - Gets basic info for the logged-in user
 router.get('/me', protect, async (req, res) => {
   res.status(200).json(req.user);
 });
 
-// NEW - Gets all items (Collection & Finds) for the logged-in user's dashboard
+// Gets all items (Collection & Finds) for the logged-in user's dashboard
 router.get('/dashboard', protect, async (req, res) => {
   try {
     const userId = req.user._id;
@@ -30,7 +30,7 @@ router.get('/dashboard', protect, async (req, res) => {
       title: `${item.make} ${item.model}`,
       imageUrl: item.photoUrls?.[0] || placeholderImageUrl,
       tag: 'My Collection',
-      detailPath: `/item/${item._id}`, // Correct path for collection items
+      detailPath: `/item/${item._id}`, 
       createdAt: item.createdAt,
       username: item.user?.username,
       userId: item.user?._id,
@@ -49,7 +49,7 @@ router.get('/dashboard', protect, async (req, res) => {
         title: title,
         imageUrl: find.imageUrl || placeholderImageUrl,
         tag: find.findType,
-        detailPath: `/saved-finds/${find._id}`, // CORRECTED path for saved finds
+        detailPath: `/saved-finds/${find._id}`,
         createdAt: find.createdAt,
         username: find.userId?.username,
         userId: find.userId?._id,
@@ -58,7 +58,6 @@ router.get('/dashboard', protect, async (req, res) => {
 
     const combinedItems = [...normalizedPersonalItems, ...normalizedSavedFinds];
     
-    // Sort all items chronologically for a consistent timeline view
     combinedItems.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     res.status(200).json(combinedItems);
@@ -70,7 +69,7 @@ router.get('/dashboard', protect, async (req, res) => {
 });
 
 
-// Unchanged - Powers the main social feed for followed users
+// Powers the main social feed for followed users
 router.get('/feed', protect, async (req, res) => {
   try {
     const loggedInUser = req.user;
@@ -133,7 +132,7 @@ router.get('/feed', protect, async (req, res) => {
   }
 });
 
-// Unchanged - Follow/Unfollow/Profile routes
+// Follow/Unfollow routes are unchanged
 router.post('/:id/follow', protect, async (req, res) => {
     const session = await mongoose.startSession ();
     session.startTransaction ();
@@ -212,14 +211,18 @@ router.post('/:id/unfollow', protect, async (req, res) => {
     }
 });
 
-router.get('/profile/:id', async (req, res) => {
+// This route requires protection to check the follow status.
+router.get('/profile/:id', protect, async (req, res) => {
     try {
-        const profileUser = await User.findById (req.params.id).select (
+        const loggedInUserId = req.user.id;
+        const profileUserId = req.params.id;
+
+        const profileUser = await User.findById(profileUserId).select(
           'username email followers following isCollectionPublic'
         );
     
         if (!profileUser) {
-          return res.status (404).json ({message: 'User not found.'});
+          return res.status(404).json ({message: 'User not found.'});
         }
     
         let items = [];
@@ -229,6 +232,10 @@ router.get('/profile/:id', async (req, res) => {
             privacy: 'Public',
           }).sort ({createdAt: -1});
         }
+
+        // Determine the relationship between the logged-in user and the profile user.
+        const isFollowing = req.user.following.map(id => id.toString()).includes(profileUserId);
+        const isFollower = profileUser.followers.map(id => id.toString()).includes(loggedInUserId);
     
         const profileData = {
           _id: profileUser._id,
@@ -237,12 +244,14 @@ router.get('/profile/:id', async (req, res) => {
           followingCount: profileUser.following.length,
           items: items,
           isCollectionPublic: profileUser.isCollectionPublic,
+          isFollowing: isFollowing,
+          isFollower: isFollower,
         };
     
-        res.status (200).json (profileData);
+        res.status(200).json(profileData);
       } catch (error) {
         console.error ('Get profile error:', error);
-        res.status (500).json ({message: 'Server error while fetching profile.'});
+        res.status(500).json ({message: 'Server error while fetching profile.'});
       }
 });
 

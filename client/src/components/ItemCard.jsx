@@ -1,3 +1,4 @@
+// client/src/components/ItemCard.jsx
 import React from 'react';
 import { Link } from 'react-router-dom';
 
@@ -6,10 +7,19 @@ const tagColors = {
   'My Collection': 'bg-purple-600',
   'Wild Find': 'bg-green-600',
   'Ad Analysis': 'bg-blue-600',
+  // Add more as needed
 };
 
 const ItemCard = ({ item }) => {
   const placeholderImageUrl = 'https://placehold.co/150x150/2C2C2C/E0E0E0?text=No+Image';
+
+  // --- NEW ---
+  // A simple, reusable tag for the "Following" status
+  const FollowingTag = () => (
+    <span className="ml-2 bg-blue-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+      Following
+    </span>
+  );
 
   return (
     <div
@@ -35,11 +45,16 @@ const ItemCard = ({ item }) => {
         <h3 className="font-serif text-vav-accent-primary text-lg font-bold text-center">
           {item.title}
         </h3>
+        
+        {/* --- UPDATED --- */}
+        {/* The username and the new tag are wrapped in a flex container for alignment */}
         {item.username && item.userId && (
-          <p className="text-xs text-center text-vav-text-secondary mt-1 mb-2">
-            by <Link to={`/profile/${item.userId}`} className="hover:underline hover:text-vav-accent-secondary transition-colors">{item.username}</Link>
-          </p>
+          <div className="text-xs text-center text-vav-text-secondary mt-1 mb-2 flex items-center justify-center">
+            <span>by <Link to={`/profile/${item.userId}`} className="hover:underline hover:text-vav-accent-secondary transition-colors">{item.username}</Link></span>
+            {item.isFollowing && <FollowingTag />}
+          </div>
         )}
+
         <div className="flex-grow"></div>
         <Link
           to={item.detailPath}

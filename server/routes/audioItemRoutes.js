@@ -7,6 +7,7 @@ const { protect } = require('../middleware/authMiddleware');
 const AudioItem = require('../models/AudioItem');
 const WildFind = require('../models/wildFind');
 
+// ... (rest of the imports remain the same)
 const {
   getAiFullAnalysisForCollectionItem,
   getVisualAnalysis,
@@ -19,8 +20,10 @@ const {
   deleteFromGcs,
 } = require('../utils/geminiService');
 
+
 const router = express.Router();
 
+// ... (Multer and GCS middleware remain the same)
 // --- Multer Configurations ---
 const uploadMultiple = multer({
   storage: multer.memoryStorage(),
@@ -66,7 +69,6 @@ const uploadToGcsMiddleware = async (req, res, next) => {
   }
 };
 
-// --- Main Audio Item CRUD Routes ---
 
 // --- UNIFIED DISCOVER ROUTE ---
 router.get('/discover', protect, async (req, res) => {
@@ -74,6 +76,10 @@ router.get('/discover', protect, async (req, res) => {
     const page = parseInt(req.query.page, 10) || 1;
     const limit = parseInt(req.query.limit, 10) || 20;
     const skip = (page - 1) * limit;
+
+    // --- UPDATED ---
+    // Create a Set of followed user IDs for efficient lookup.
+    const followingIds = new Set(req.user.following.map(id => id.toString()));
 
     const audioItemsPromise = AudioItem.find({ privacy: 'Public' })
       .populate('user', 'username _id')
@@ -88,6 +94,7 @@ router.get('/discover', protect, async (req, res) => {
       wildFindsPromise,
     ]);
 
+    // --- UPDATED ---
     const normalizedAudioItems = audioItems.map(item => ({
       id: item._id,
       title: `${item.make} ${item.model}`,
@@ -97,8 +104,10 @@ router.get('/discover', protect, async (req, res) => {
       createdAt: item.createdAt,
       username: item.user?.username,
       userId: item.user?._id,
+      isFollowing: followingIds.has(item.user?._id.toString()), // Add the flag
     }));
 
+    // --- UPDATED ---
     const normalizedWildFinds = wildFinds.map(find => {
       let title = 'Untitled Find';
       if (find.findType === 'Wild Find' && find.analysis?.identifiedItem) {
@@ -116,6 +125,7 @@ router.get('/discover', protect, async (req, res) => {
         createdAt: find.createdAt,
         username: find.userId?.username,
         userId: find.userId?._id,
+        isFollowing: followingIds.has(find.userId?._id.toString()), // Add the flag
       };
     });
 
@@ -133,6 +143,7 @@ router.get('/discover', protect, async (req, res) => {
   }
 });
 
+// ... (The rest of the routes in this file (GET, POST, PUT, DELETE, etc.) remain unchanged)
 // GET /api/items
 router.get('/', protect, async (req, res) => {
   try {
@@ -270,9 +281,6 @@ router.post(
 );
 
 // PUT /api/items/:id
-// NOTE: This route's logic was already correct. It properly uses `uploadMultiple` 
-// and combines the `existingImageUrls` with the newly uploaded URLs (`req.gcsUrls`).
-// The bug was that the frontend was not sending the `existingImageUrls` field.
 router.put(
   '/:id',
   protect,
@@ -477,7 +485,7 @@ router.post(
         'Model Not Clearly Identifiable'
         ? visualAnalysis.model
                 : textAnalysis.extractedModel;
-      const valueInsight = await getAiValueInsight(
+      const valueInsight = await getAiValueeinstein(
         identifiedMake,
         identifiedModel,
         visualAnalysis.conditionDescription
@@ -511,5 +519,6 @@ router.post(
     }
   }
 );
+
 
 module.exports = router;

@@ -1,84 +1,93 @@
-import React, { useState, useEffect } from 'react';
+// client/src/pages/ProfilePage.jsx
+
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
-import { useParams, Link } from 'react-router-dom';
-import { jwtDecode } from 'jwt-decode';
-import ItemCard from '../components/ItemCard'; // --- IMPORT the reusable ItemCard component
+import { useParams } from 'react-router-dom';
+import ItemCard from '../components/ItemCard';
 
 const ProfilePage = () => {
     const { userId } = useParams();
     const [profile, setProfile] = useState(null);
-    const [loggedInUser, setLoggedInUser] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [isProcessingFollow, setIsProcessingFollow] = useState(false);
 
-    useEffect(() => {
-        const fetchAllData = async () => {
-            setLoading(true);
-            setError(null);
+    // --- NEW: Reusable styled tags ---
+    const FollowingTag = () => (
+      <span className="ml-3 bg-blue-500 text-white text-xs font-bold px-2.5 py-1 rounded-full">
+        Following
+      </span>
+    );
+    const FollowsYouTag = () => (
+      <span className="ml-3 bg-teal-500 text-white text-xs font-bold px-2.5 py-1 rounded-full">
+        Follows You
+      </span>
+    );
+    
+    // --- UPDATED ---
+    // The data fetching logic is now consolidated into a single function.
+    const fetchProfileData = useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        const token = localStorage.getItem('authToken');
+        if (!token) {
+            setError("You must be logged in to view profiles.");
+            setLoading(false);
+            return;
+        }
 
-            const token = localStorage.getItem('authToken');
-            if (!token) {
-                setError("You must be logged in to view profiles.");
-                setLoading(false);
-                return;
-            }
-
-            try {
-                // We fetch the logged-in user's data from the /me endpoint
-                // to ensure we have the latest 'following' list.
-                const loggedInUserResponse = await axios.get('/api/users/me', {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                setLoggedInUser(loggedInUserResponse.data);
-
-                // Then fetch the profile data for the user whose page we are on.
-                const profileResponse = await axios.get(`/api/users/profile/${userId}`);
-                setProfile(profileResponse.data);
-
-            } catch (err) {
-                console.error("Failed to fetch profile data:", err);
-                setError(err.response?.data?.message || "Failed to load profile.");
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchAllData();
+        try {
+            const profileResponse = await axios.get(`/api/users/profile/${userId}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setProfile(profileResponse.data);
+        } catch (err) {
+            console.error("Failed to fetch profile data:", err);
+            setError(err.response?.data?.message || "Failed to load profile.");
+        } finally {
+            setLoading(false);
+        }
     }, [userId]);
 
+    useEffect(() => {
+        fetchProfileData();
+    }, [fetchProfileData]);
+
+    // --- UPDATED ---
+    // Follow/Unfollow handlers now optimistically update the UI and then refetch data.
     const handleFollow = async () => {
+        setIsProcessingFollow(true);
         const token = localStorage.getItem('authToken');
         try {
-            // Use relative paths to leverage the Vite proxy
             await axios.post(`/api/users/${userId}/follow`, {}, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            // Optimistic UI update
-            setLoggedInUser(prev => ({ ...prev, following: [...prev.following, userId] }));
-            setProfile(prev => ({ ...prev, followersCount: prev.followersCount + 1 }));
+            fetchProfileData(); // Refetch to get the latest follower counts and status
         } catch (err) {
             console.error("Failed to follow user:", err);
-            // Optionally, revert UI on failure
+            setError("An error occurred. Please try again.");
+        } finally {
+            setIsProcessingFollow(false);
         }
     };
 
     const handleUnfollow = async () => {
+        setIsProcessingFollow(true);
         const token = localStorage.getItem('authToken');
         try {
-            // Use relative paths to leverage the Vite proxy
             await axios.post(`/api/users/${userId}/unfollow`, {}, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            // Optimistic UI update
-            setLoggedInUser(prev => ({ ...prev, following: prev.following.filter(id => id !== userId) }));
-            setProfile(prev => ({ ...prev, followersCount: prev.followersCount - 1 }));
+            fetchProfileData(); // Refetch to get the latest follower counts and status
         } catch (err) {
             console.error("Failed to unfollow user:", err);
-            // Optionally, revert UI on failure
+            setError("An error occurred. Please try again.");
+        } finally {
+            setIsProcessingFollow(false);
         }
     };
 
-    if (loading) {
+    if (loading && !profile) { // Show initial loading spinner
         return <div className="text-center p-8 text-vav-text">Loading Profile...</div>;
     }
 
@@ -86,34 +95,43 @@ const ProfilePage = () => {
         return <div className="text-center p-8 text-red-500">{error}</div>;
     }
     
-    if (!profile || !loggedInUser) {
+    if (!profile) {
         return <div className="text-center p-8 text-vav-text">Could not load profile data.</div>;
     }
-
-    const isOwnProfile = loggedInUser._id === userId;
-    // Check if the loggedInUser's following array (which contains IDs) includes the current profile's ID
-    const isFollowing = loggedInUser.following.some(followedUser => followedUser._id === userId);
-
+    
+    // The logged-in user's ID is now fetched from the token on the backend.
+    // We get the isOwnProfile status from comparing IDs.
+    const token = localStorage.getItem('authToken');
+    const loggedInUserId = token ? JSON.parse(atob(token.split('.')[1])).id : null;
+    const isOwnProfile = loggedInUserId === userId;
 
     return (
         <div className="w-full max-w-4xl mx-auto p-4">
             <header className="flex flex-col md:flex-row items-center justify-between mb-8 p-6 bg-vav-content-card rounded-lg shadow-xl">
                 <div>
-                    <h1 className="text-4xl font-serif text-vav-accent-primary">{profile.username}</h1>
+                    {/* --- UPDATED --- */}
+                    {/* Username and tags are now displayed together */}
+                    <div className="flex items-center mb-2">
+                        <h1 className="text-4xl font-serif text-vav-accent-primary">{profile.username}</h1>
+                        {profile.isFollowing && <FollowingTag />}
+                        {profile.isFollower && <FollowsYouTag />}
+                    </div>
                     <div className="flex gap-6 mt-2 text-vav-text-secondary">
                         <span><strong className="text-vav-text">{profile.items.length}</strong> Items</span>
                         <span><strong className="text-vav-text">{profile.followersCount}</strong> Followers</span>
                         <span><strong className="text-vav-text">{profile.followingCount}</strong> Following</span>
                     </div>
                 </div>
+                {/* --- UPDATED --- */}
+                {/* Button logic now uses the isFollowing flag from the API */}
                 {!isOwnProfile && (
-                    isFollowing ? (
-                        <button onClick={handleUnfollow} className="mt-4 md:mt-0 bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-6 rounded transition-colors">
-                            Unfollow
+                    profile.isFollowing ? (
+                        <button onClick={handleUnfollow} disabled={isProcessingFollow} className="mt-4 md:mt-0 bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-6 rounded transition-colors disabled:opacity-50">
+                            {isProcessingFollow ? '...' : 'Unfollow'}
                         </button>
                     ) : (
-                        <button onClick={handleFollow} className="mt-4 md:mt-0 bg-vav-accent-primary hover:bg-vav-accent-secondary text-white font-bold py-2 px-6 rounded transition-colors">
-                            Follow
+                        <button onClick={handleFollow} disabled={isProcessingFollow} className="mt-4 md:mt-0 bg-vav-accent-primary hover:bg-vav-accent-secondary text-white font-bold py-2 px-6 rounded transition-colors disabled:opacity-50">
+                             {isProcessingFollow ? '...' : 'Follow'}
                         </button>
                     )
                 )}
@@ -127,17 +145,17 @@ const ProfilePage = () => {
                     </div>
                 ) : profile.items.length > 0 ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-                        {/* --- REFACTOR to use the ItemCard component --- */}
                         {profile.items.map(item => {
                             const normalizedItem = {
                                 id: item._id,
                                 title: `${item.make} ${item.model}`,
                                 imageUrl: item.photoUrls?.[0],
-                                tag: 'My Collection', // Or derive from item.status if needed
+                                tag: item.itemType,
                                 detailPath: `/item/${item._id}`,
-                                // The profile doesn't include the item creator's name, but we can omit it here.
-                                // username: profile.username, 
-                                // userId: profile._id
+                                username: profile.username, 
+                                userId: profile._id,
+                                // Pass the follow status to the card
+                                isFollowing: profile.isFollowing,
                             };
                             return <ItemCard key={item._id} item={normalizedItem} />;
                         })}
