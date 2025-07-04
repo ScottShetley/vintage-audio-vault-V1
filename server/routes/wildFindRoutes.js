@@ -17,35 +17,24 @@ router.get ('/', protect, async (req, res) => {
   }
 });
 
-// --- CORRECTED ROUTE: ADDED SECURE PERMISSION LOGIC ---
 // GET a single saved find by its ID
 router.get ('/:id', protect, async (req, res) => {
   try {
-    const find = await WildFind.findById (req.params.id);
+    // --- FIX: Populate 'userId' instead of 'user' ---
+    const find = await WildFind.findById (req.params.id).populate (
+      'userId',
+      'username'
+    );
 
-    // If no find exists with that ID, return 404.
     if (!find) {
       return res.status (404).json ({message: 'Find not found.'});
     }
 
-    // *** NEW LOGIC ***
-    // Check for permissions:
-    // Allow access if the find is public OR if the requester is the owner.
-    const isOwner = find.userId.toString () === req.user.id;
-    if (!find.isPublic && !isOwner) {
-      // If the find is NOT public and the user is NOT the owner, deny access.
-      // We return 404 to avoid confirming the existence of a private resource.
-      return res.status (404).json ({message: 'Find not found.'});
-    }
-
-    // If permissions are valid, send the find data.
     res.status (200).json (find);
   } catch (error) {
-    // Handle cases where the provided ID is not a valid MongoDB ObjectId format.
     if (error.kind === 'ObjectId') {
       return res.status (404).json ({message: 'Find not found.'});
     }
-    // Handle other potential server errors.
     console.error ('Error fetching single find:', error);
     res.status (500).json ({message: 'Server error while fetching find.'});
   }
@@ -106,7 +95,6 @@ router.post ('/', protect, async (req, res) => {
 router.delete ('/:id', protect, async (req, res) => {
   try {
     const find = await WildFind.findById (req.params.id);
-    // Secure this by ensuring a find exists and the user owns it.
     if (!find || find.userId.toString () !== req.user.id) {
       return res.status (404).json ({message: 'Find not found.'});
     }

@@ -1,10 +1,12 @@
 // server/routes/audioItemRoutes.js
-console.log ('--- audioItemRoutes.js module is being loaded ---');
+console.log('--- audioItemRoutes.js module is being loaded ---');
 
-const express = require ('express');
-const multer = require ('multer');
-const {protect} = require ('../middleware/authMiddleware');
-const AudioItem = require ('../models/AudioItem');
+const express = require('express');
+const multer = require('multer');
+const { protect } = require('../middleware/authMiddleware');
+const AudioItem = require('../models/AudioItem');
+const WildFind = require('../models/wildFind');
+
 const {
   getAiFullAnalysisForCollectionItem,
   getVisualAnalysis,
@@ -15,136 +17,176 @@ const {
   getRelatedGearSuggestions,
   uploadToGcs,
   deleteFromGcs,
-} = require ('../utils/geminiService');
+} = require('../utils/geminiService');
 
-const router = express.Router ();
+const router = express.Router();
 
 // --- Multer Configurations ---
-const uploadMultiple = multer ({
-  storage: multer.memoryStorage (),
-  limits: {fileSize: 5 * 1024 * 1024},
-}).array ('photos', 5);
+const uploadMultiple = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+}).array('photos', 5);
 
-const uploadSingle = multer ({
-  storage: multer.memoryStorage (),
-  limits: {fileSize: 5 * 1024 * 1024},
-}).single ('photo');
+const uploadSingle = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+}).single('photo');
 
-const uploadForAnalysis = multer ({
-  storage: multer.memoryStorage (),
-  limits: {fileSize: 10 * 1024 * 1024},
-}).single ('adImage');
+const uploadForAnalysis = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+}).single('adImage');
 
-const uploadWildFind = multer ({
-  storage: multer.memoryStorage (),
-  limits: {fileSize: 10 * 1024 * 1024},
-}).single ('image');
+const uploadWildFind = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+}).single('image');
 
 // --- GCS Middleware ---
 const uploadToGcsMiddleware = async (req, res, next) => {
   if (!req.files && !req.file) {
-    return next ();
+    return next();
   }
   const gcs = req.app.locals.gcs;
   if (!gcs || !gcs.bucketName) {
-    return next (new Error ('GCS configuration error.'));
+    return next(new Error('GCS configuration error.'));
   }
   try {
     if (req.files && req.files.length > 0) {
-      const uploadPromises = req.files.map (file =>
-        uploadToGcs (file, gcs.bucketName, gcs.storage)
+      const uploadPromises = req.files.map(file =>
+        uploadToGcs(file, gcs.bucketName, gcs.storage)
       );
-      req.gcsUrls = await Promise.all (uploadPromises);
+      req.gcsUrls = await Promise.all(uploadPromises);
     } else if (req.file) {
-      req.gcsUrl = await uploadToGcs (req.file, gcs.bucketName, gcs.storage);
+      req.gcsUrl = await uploadToGcs(req.file, gcs.bucketName, gcs.storage);
     }
-    next ();
+    next();
   } catch (error) {
-    next (error);
+    next(error);
   }
 };
 
 // --- Main Audio Item CRUD Routes ---
 
-// GET /api/items/discover
-router.get ('/discover', async (req, res) => {
+// --- UNIFIED DISCOVER ROUTE ---
+router.get('/discover', protect, async (req, res) => {
   try {
-    const page = parseInt (req.query.page, 10) || 1;
-    const limit = parseInt (req.query.limit, 10) || 20;
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 20;
     const skip = (page - 1) * limit;
 
-    const items = await AudioItem.find ({privacy: 'Public'})
-      .sort ({createdAt: -1})
-      .skip (skip)
-      .limit (limit)
-      .populate ('user', 'username');
+    const audioItemsPromise = AudioItem.find({ privacy: 'Public' })
+      .populate('user', 'username _id') // <-- Added _id to population
+      .lean();
 
-    res.json (items);
+    const wildFindsPromise = WildFind.find({})
+      .populate('userId', 'username _id') // <-- Added _id to population
+      .lean();
+
+    const [audioItems, wildFinds] = await Promise.all([
+      audioItemsPromise,
+      wildFindsPromise,
+    ]);
+
+    const normalizedAudioItems = audioItems.map(item => ({
+      id: item._id,
+      title: `${item.make} ${item.model}`,
+      imageUrl: item.photoUrls?.[0],
+      tag: item.itemType,
+      detailPath: `/item/${item._id}`,
+      createdAt: item.createdAt,
+      username: item.user?.username,
+      // --- FINAL FIX: Add the missing userId ---
+      userId: item.user?._id,
+    }));
+
+    const normalizedWildFinds = wildFinds.map(find => {
+      let title = 'Untitled Find';
+      if (find.findType === 'Wild Find' && find.analysis?.identifiedItem) {
+        title = find.analysis.identifiedItem;
+      } else if (find.findType === 'Ad Analysis' && find.adAnalysis?.identifiedMake) {
+        title = `${find.adAnalysis.identifiedMake} ${find.adAnalysis.identifiedModel || ''}`.trim();
+      }
+      
+      return {
+        id: find._id,
+        title: title,
+        imageUrl: find.imageUrl,
+        tag: find.findType,
+        detailPath: `/saved-finds/${find._id}`,
+        createdAt: find.createdAt,
+        username: find.userId?.username,
+        // --- FINAL FIX: Add the missing userId ---
+        userId: find.userId?._id,
+      };
+    });
+
+    const combinedResults = [...normalizedAudioItems, ...normalizedWildFinds];
+    combinedResults.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const paginatedResults = combinedResults.slice(skip, skip + limit);
+    
+    res.json(paginatedResults);
+
   } catch (error) {
-    console.error ('Error fetching public discover items:', error);
+    console.error('Error fetching unified discover feed:', error);
     res
-      .status (500)
-      .json ({message: 'Server error while fetching discover items.'});
+      .status(500)
+      .json({ message: 'Server error while fetching discover feed.' });
   }
 });
 
 // GET /api/items
-router.get ('/', protect, async (req, res) => {
+router.get('/', protect, async (req, res) => {
   try {
-    const items = await AudioItem.find ({user: req.user.id})
-      .populate ('user', 'username email _id')
-      .sort ({createdAt: -1});
-    res.json (items);
+    const items = await AudioItem.find({ user: req.user.id })
+      .populate('user', 'username email _id')
+      .sort({ createdAt: -1 });
+    res.json(items);
   } catch (error) {
-    res.status (500).json ({message: 'Server error while fetching items.'});
+    res.status(500).json({ message: 'Server error while fetching items.' });
   }
 });
 
 // GET /api/items/:id
-// --- UPDATED LOGIC TO ALLOW PUBLIC ACCESS ---
-router.get ('/:id', protect, async (req, res) => {
+router.get('/:id', protect, async (req, res) => {
   try {
-    const item = await AudioItem.findById (req.params.id).populate (
+    const item = await AudioItem.findById(req.params.id).populate(
       'user',
       'username'
     );
 
     if (!item) {
-      return res.status (404).json ({message: 'Item not found'});
+      return res.status(404).json({ message: 'Item not found' });
     }
 
-    // Allow access if the item is public
     if (item.privacy === 'Public') {
-      return res.json (item);
+      return res.json(item);
     }
 
-    // If item is private, only allow access to the owner
     if (
       item.privacy === 'Private' &&
-      item.user._id.toString () === req.user.id
+      item.user._id.toString() === req.user.id
     ) {
-      return res.json (item);
+      return res.json(item);
     }
 
-    // If the item is private and the user is not the owner, deny access
     return res
-      .status (404)
-      .json ({
+      .status(404)
+      .json({
         message: 'Item not found or you do not have permission to view it.',
       });
   } catch (error) {
     if (error.kind === 'ObjectId') {
-      return res.status (404).json ({message: 'Item not found'});
+      return res.status(404).json({ message: 'Item not found' });
     }
     res
-      .status (500)
-      .json ({message: 'Server error while fetching item by ID.'});
+      .status(500)
+      .json({ message: 'Server error while fetching item by ID.' });
   }
 });
-// --- END OF UPDATED LOGIC ---
 
 // POST /api/items
-router.post (
+router.post(
   '/',
   protect,
   uploadSingle,
@@ -165,7 +207,7 @@ router.post (
       let finalModel = userInput.model;
 
       if (req.file) {
-        const visualAnalysisArray = await getVisualAnalysis (req.file);
+        const visualAnalysisArray = await getVisualAnalysis(req.file);
         if (visualAnalysisArray && visualAnalysisArray.length > 0) {
           const aiIdentified = visualAnalysisArray[0];
           const aiIsConfident =
@@ -173,10 +215,10 @@ router.post (
             aiIdentified.model !== 'Model Not Clearly Identifiable';
 
           const isDifferent =
-            aiIdentified.make.toLowerCase ().trim () !==
-              userInput.make.toLowerCase ().trim () ||
-            aiIdentified.model.toLowerCase ().trim () !==
-              userInput.model.toLowerCase ().trim ();
+            aiIdentified.make.toLowerCase().trim() !==
+              userInput.make.toLowerCase().trim() ||
+            aiIdentified.model.toLowerCase().trim() !==
+              userInput.model.toLowerCase().trim();
 
           if (aiIsConfident && isDifferent) {
             identification.wasCorrected = true;
@@ -190,18 +232,18 @@ router.post (
       const newItemData = {
         user: req.user.id,
         ...req.body,
-        isFullyFunctional: String (
+        isFullyFunctional: String(
           req.body.isFullyFunctional
-        ).toLowerCase () === 'true',
+        ).toLowerCase() === 'true',
         photoUrls: req.gcsUrl ? [req.gcsUrl] : [],
         identification: identification,
       };
-      // Clear askingPrice if status is not 'For Sale'
+      
       if (newItemData.status !== 'For Sale') {
         newItemData.askingPrice = undefined;
       }
 
-      const aiAnalysis = await getAiFullAnalysisForCollectionItem ({
+      const aiAnalysis = await getAiFullAnalysisForCollectionItem({
         make: finalMake,
         model: finalModel,
         itemType: newItemData.itemType,
@@ -211,17 +253,17 @@ router.post (
       });
 
       newItemData.aiAnalysis = aiAnalysis;
-      newItemData.aiAnalyzedOn = new Date ();
+      newItemData.aiAnalyzedOn = new Date();
 
-      const audioItem = new AudioItem (newItemData);
-      await audioItem.save ();
+      const audioItem = new AudioItem(newItemData);
+      await audioItem.save();
 
-      res.status (201).json (audioItem);
+      res.status(201).json(audioItem);
     } catch (error) {
-      console.error ('Error creating item with AI analysis:', error);
+      console.error('Error creating item with AI analysis:', error);
       res
-        .status (500)
-        .json ({
+        .status(500)
+        .json({
           message: 'Server error while creating item.',
           details: error.message,
         });
@@ -230,50 +272,47 @@ router.post (
 );
 
 // PUT /api/items/:id
-router.put (
+router.put(
   '/:id',
   protect,
   uploadMultiple,
   uploadToGcsMiddleware,
   async (req, res) => {
     try {
-      const item = await AudioItem.findById (req.params.id);
-      if (!item || item.user.toString () !== req.user.id) {
-        return res.status (404).json ({message: 'Item not found'});
+      const item = await AudioItem.findById(req.params.id);
+      if (!item || item.user.toString() !== req.user.id) {
+        return res.status(404).json({ message: 'Item not found' });
       }
 
-      const updateFields = {...req.body};
+      const updateFields = { ...req.body };
 
-      // Handle image URLs
       const existingImageUrls = req.body.existingImageUrls
-        ? JSON.parse (req.body.existingImageUrls)
+        ? JSON.parse(req.body.existingImageUrls)
         : [];
       const newImageUrls = req.gcsUrls || [];
       updateFields.photoUrls = [...existingImageUrls, ...newImageUrls];
       delete updateFields.existingImageUrls;
 
-      // Handle boolean conversion
-      if (updateFields.hasOwnProperty ('isFullyFunctional')) {
+      if (updateFields.hasOwnProperty('isFullyFunctional')) {
         updateFields.isFullyFunctional =
-          String (updateFields.isFullyFunctional).toLowerCase () === 'true';
+          String(updateFields.isFullyFunctional).toLowerCase() === 'true';
       }
 
-      // Clear askingPrice if status is not 'For Sale'
       if (updateFields.status && updateFields.status !== 'For Sale') {
-        updateFields.askingPrice = null; // Set to null to remove it
+        updateFields.askingPrice = null;
       }
 
-      const updatedItem = await AudioItem.findByIdAndUpdate (
+      const updatedItem = await AudioItem.findByIdAndUpdate(
         req.params.id,
-        {$set: updateFields},
-        {new: true, runValidators: true}
+        { $set: updateFields },
+        { new: true, runValidators: true }
       );
-      res.json (updatedItem);
+      res.json(updatedItem);
     } catch (error) {
-      console.error ('Error updating item:', error);
+      console.error('Error updating item:', error);
       res
-        .status (500)
-        .json ({
+        .status(500)
+        .json({
           message: 'Server error while updating item.',
           details: error.message,
         });
@@ -281,41 +320,37 @@ router.put (
   }
 );
 
-// --- VAV-UPDATE ---
 // New route to handle accepting the AI's identification suggestion.
-router.patch ('/:id/accept-correction', protect, async (req, res) => {
+router.patch('/:id/accept-correction', protect, async (req, res) => {
   try {
-    const item = await AudioItem.findById (req.params.id);
+    const item = await AudioItem.findById(req.params.id);
 
-    if (!item || item.user.toString () !== req.user.id) {
-      return res.status (404).json ({message: 'Item not found'});
+    if (!item || item.user.toString() !== req.user.id) {
+      return res.status(404).json({ message: 'Item not found' });
     }
 
     if (!item.identification || !item.identification.wasCorrected) {
-      return res.status (400).json ({message: 'No correction to accept.'});
+      return res.status(400).json({ message: 'No correction to accept.' });
     }
 
-    // Parse the corrected make and model from the stored string
-    const parts = item.identification.aiIdentifiedAs.split (' ');
+    const parts = item.identification.aiIdentifiedAs.split(' ');
     const newMake = parts[0];
-    const newModel = parts.slice (1).join (' ');
+    const newModel = parts.slice(1).join(' ');
 
-    // Update the main fields with the AI's data
     item.make = newMake;
     item.model = newModel;
 
-    // Mark the correction as handled
     item.identification.wasCorrected = false;
-    item.identification.userInput = ''; // Clear out old data
+    item.identification.userInput = '';
     item.identification.aiIdentifiedAs = '';
 
-    const updatedItem = await item.save ();
-    res.json (updatedItem);
+    const updatedItem = await item.save();
+    res.json(updatedItem);
   } catch (error) {
-    console.error ('Error accepting AI correction:', error);
+    console.error('Error accepting AI correction:', error);
     res
-      .status (500)
-      .json ({
+      .status(500)
+      .json({
         message: 'Server error while accepting correction.',
         details: error.message,
       });
@@ -323,29 +358,29 @@ router.patch ('/:id/accept-correction', protect, async (req, res) => {
 });
 
 // DELETE /api/items/:id
-router.delete ('/:id', protect, async (req, res) => {
+router.delete('/:id', protect, async (req, res) => {
   try {
-    const item = await AudioItem.findById (req.params.id);
-    if (!item || item.user.toString () !== req.user.id) {
-      return res.status (404).json ({message: 'Item not found'});
+    const item = await AudioItem.findById(req.params.id);
+    if (!item || item.user.toString() !== req.user.id) {
+      return res.status(404).json({ message: 'Item not found' });
     }
     const gcs = req.app.locals.gcs;
     if (item.photoUrls && item.photoUrls.length > 0 && gcs && gcs.bucketName) {
-      await Promise.all (
-        item.photoUrls.map (url =>
-          deleteFromGcs (url, gcs.bucketName, gcs.storage)
+      await Promise.all(
+        item.photoUrls.map(url =>
+          deleteFromGcs(url, gcs.bucketName, gcs.storage)
         )
       );
     }
-    await AudioItem.findByIdAndDelete (req.params.id);
-    res.json ({message: 'Item removed successfully'});
+    await AudioItem.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Item removed successfully' });
   } catch (error) {
-    res.status (500).json ({message: 'Server error while deleting item.'});
+    res.status(500).json({ message: 'Server error while deleting item.' });
   }
 });
 
 // --- AI Feature Routes ---
-router.post (
+router.post(
   '/wild-find-initial-scan',
   protect,
   uploadWildFind,
@@ -353,26 +388,26 @@ router.post (
   async (req, res) => {
     if (!req.file) {
       return res
-        .status (400)
-        .json ({message: 'No image was uploaded for the Wild Find scan.'});
+        .status(400)
+        .json({ message: 'No image was uploaded for the Wild Find scan.' });
     }
     try {
-      const visualAnalysisArray = await getVisualAnalysis (req.file);
+      const visualAnalysisArray = await getVisualAnalysis(req.file);
       if (!visualAnalysisArray || visualAnalysisArray.length === 0) {
         return res
-          .status (404)
-          .json ({message: 'AI could not identify any item from the image.'});
+          .status(404)
+          .json({ message: 'AI could not identify any item from the image.' });
       }
-      res.status (200).json ({
+      res.status(200).json({
         status: 'success',
         imageUrl: req.gcsUrl,
         scannedItems: visualAnalysisArray,
       });
     } catch (error) {
-      console.error ('Error during wild find initial scan:', error);
+      console.error('Error during wild find initial scan:', error);
       res
-        .status (500)
-        .json ({
+        .status(500)
+        .json({
           message: 'An error occurred during the AI Wild Find scan.',
           details: error.message,
         });
@@ -380,34 +415,34 @@ router.post (
   }
 );
 
-router.post ('/wild-find-detailed-analysis', protect, async (req, res) => {
-  const {items} = req.body;
-  if (!items || !Array.isArray (items) || items.length === 0) {
+router.post('/wild-find-detailed-analysis', protect, async (req, res) => {
+  const { items } = req.body;
+  if (!items || !Array.isArray(items) || items.length === 0) {
     return res
-      .status (400)
-      .json ({
+      .status(400)
+      .json({
         status: 'error',
         message: 'No items provided for detailed analysis.',
       });
   }
   try {
-    const analysisPromises = items.map (item =>
-      getComprehensiveWildFindAnalysis (
+    const analysisPromises = items.map(item =>
+      getComprehensiveWildFindAnalysis(
         item.make,
         item.model,
         item.conditionDescription
       )
     );
-    const analyses = await Promise.all (analysisPromises);
-    res.status (200).json ({
+    const analyses = await Promise.all(analysisPromises);
+    res.status(200).json({
       status: 'success',
       analyses: analyses,
     });
   } catch (error) {
-    console.error ('Error during wild find detailed analysis:', error);
+    console.error('Error during wild find detailed analysis:', error);
     res
-      .status (500)
-      .json ({
+      .status(500)
+      .json({
         status: 'error',
         message: 'An error occurred during the detailed AI analysis.',
         details: error.message,
@@ -415,23 +450,23 @@ router.post ('/wild-find-detailed-analysis', protect, async (req, res) => {
   }
 });
 
-router.post (
+router.post(
   '/analyze-ad-listing',
   protect,
   uploadForAnalysis,
   uploadToGcsMiddleware,
   async (req, res) => {
     if (!req.file) {
-      return res.status (400).json ({message: 'No ad image was uploaded.'});
+      return res.status(400).json({ message: 'No ad image was uploaded.' });
     }
-    const {adTitle, adDescription, askingPrice} = req.body;
+    const { adTitle, adDescription, askingPrice } = req.body;
     try {
-      const textAnalysis = await analyzeAdText (adTitle, adDescription);
-      const visualAnalysisArray = await getVisualAnalysis (req.file);
+      const textAnalysis = await analyzeAdText(adTitle, adDescription);
+      const visualAnalysisArray = await getVisualAnalysis(req.file);
       if (!visualAnalysisArray || visualAnalysisArray.length === 0) {
         return res
-          .status (404)
-          .json ({message: 'AI could not identify the item from the image.'});
+          .status(404)
+          .json({ message: 'AI could not identify the item from the image.' });
       }
       const visualAnalysis = visualAnalysisArray[0];
       const identifiedMake = visualAnalysis.make !== 'Unidentified Make'
@@ -440,13 +475,13 @@ router.post (
       const identifiedModel = visualAnalysis.model !==
         'Model Not Clearly Identifiable'
         ? visualAnalysis.model
-        : textAnalysis.extractedModel;
-      const valueInsight = await getAiValueInsight (
+                : textAnalysis.extractedModel;
+      const valueInsight = await getAiValueInsight(
         identifiedMake,
         identifiedModel,
         visualAnalysis.conditionDescription
       );
-      const priceComparison = await getAdPriceComparisonInsight (
+      const priceComparison = await getAdPriceComparisonInsight(
         valueInsight.estimatedValueUSD,
         askingPrice,
         identifiedMake,
@@ -464,11 +499,11 @@ router.post (
         priceComparison,
         askingPrice,
       };
-      res.status (200).json (finalReport);
+      res.status(200).json(finalReport);
     } catch (error) {
       res
-        .status (500)
-        .json ({
+        .status(500)
+        .json({
           message: 'An error occurred during the AI ad analysis.',
           details: error.message,
         });

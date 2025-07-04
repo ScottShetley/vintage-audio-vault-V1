@@ -16,27 +16,26 @@ const DiscoverPage = () => {
     setLoading(true);
     setError(null);
 
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+        setError('Authentication token not found. Please log in.');
+        setLoading(false);
+        return;
+    }
+
     try {
       const { data } = await axios.get(`/api/items/discover`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
         params: { page: currentPage, limit: DISCOVER_PAGE_LIMIT },
       });
 
       if (data.length > 0) {
-        const normalizedItems = data.map(item => ({
-          id: item._id,
-          title: `${item.make} ${item.model}`,
-          imageUrl: item.photoUrls?.[0],
-          tag: item.itemType, 
-          detailPath: `/item/${item._id}`,
-          createdAt: item.createdAt,
-          userId: item.user?._id,
-          username: item.user?.username,
-        }));
-
         if (currentPage === 1) {
-          setItems(normalizedItems);
+          setItems(data);
         } else {
-          setItems(prevItems => [...prevItems, ...normalizedItems]);
+          setItems(prevItems => [...prevItems, ...data]);
         }
         
         setHasMore(data.length === DISCOVER_PAGE_LIMIT);
@@ -65,8 +64,7 @@ const DiscoverPage = () => {
     <div className="w-full max-w-6xl mx-auto p-4">
       <div className="text-center mb-8">
         <h1 className="text-4xl font-serif text-vav-accent-primary">Discover</h1>
-        <p className="text-lg text-vav-text-secondary mt-2">Browse public items from all users in the vault.</p>
-        {/* --- ADDED: Placeholder note for future messaging system --- */}
+        <p className="text-lg text-vav-text-secondary mt-2">Browse items and finds from all users in the vault.</p>
         <p className="text-sm text-vav-text-secondary mt-4 italic">
           Want to contact a seller? An in-app messaging system is planned for a future update!
         </p>
