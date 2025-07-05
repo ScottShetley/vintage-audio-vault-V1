@@ -11,6 +11,10 @@ const WildFindPage = () => {
     const [previewUrl, setPreviewUrl] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [scanResults, setScanResults] = useState(null);
+    const [imageUrl, setImageUrl] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
+
 
     useEffect(() => {
         if (!selectedFile) {
@@ -53,8 +57,8 @@ const WildFindPage = () => {
                 }
             });
 
-            // On success, navigate to the results page with the returned data
-            navigate('/saved-finds', { state: { scanData: response.data } });
+            setScanResults(response.data.scannedItems);
+            setImageUrl(response.data.imageUrl);
 
         } catch (err) {
             console.error('Wild Find Scan Error:', err);
@@ -64,6 +68,114 @@ const WildFindPage = () => {
         }
     };
 
+    // --- UPDATED: This function now gets a full analysis before saving ---
+    const handleSaveFind = async (itemToAnalyze) => {
+        setIsSaving(true);
+        setError('');
+        const token = localStorage.getItem('authToken');
+
+        try {
+            // Step 1: Get the full, detailed analysis for the selected item.
+            const detailedAnalysisResponse = await axios.post('/api/items/wild-find-detailed-analysis', 
+                { items: [itemToAnalyze] }, // The endpoint expects an array of items
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+
+            // The API returns an array of analyses; we only need the first one.
+            const fullAnalysisPayload = detailedAnalysisResponse.data.analyses[0];
+
+            if (fullAnalysisPayload.error) {
+                throw new Error(fullAnalysisPayload.error);
+            }
+
+            // Step 2: Create the payload for saving the find, using the full analysis data.
+            const payloadToSave = {
+                findType: 'Wild Find',
+                imageUrl: imageUrl,
+                isPublic: false,
+                // The 'analysis' field will now perfectly match the database schema.
+                analysis: fullAnalysisPayload 
+            };
+
+            // Step 3: Save the properly formatted find.
+            await axios.post('/api/wild-finds', payloadToSave, {
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
+            });
+            
+            // Step 4: Navigate to the saved finds page on success.
+            navigate('/saved-finds');
+
+        } catch (err) {
+            console.error('Error processing or saving wild find:', err);
+            setError(err.response?.data?.message || 'Could not save the find. The detailed analysis might have failed.');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+    
+    const handleStartOver = () => {
+        setScanResults(null);
+        setSelectedFile(null);
+        setPreviewUrl(null);
+        setImageUrl('');
+        setError('');
+    };
+
+
+    if (loading) {
+        return (
+            <div className="w-full max-w-2xl mx-auto p-4 text-center">
+                 <div className="bg-vav-content-card shadow-xl rounded-lg p-6 md:p-8">
+                    <h2 className="text-2xl font-serif text-vav-accent-primary mb-4">Scanning Image...</h2>
+                    <p className="text-vav-text-secondary">The AI is analyzing your find. Please wait.</p>
+                    <div className="flex justify-center items-center h-32">
+                        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-vav-accent-secondary"></div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    if (scanResults) {
+        return (
+            <div className="w-full max-w-2xl mx-auto p-4">
+                <div className="bg-vav-content-card shadow-xl rounded-lg p-6 md:p-8">
+                    <h1 className="text-3xl font-serif text-vav-accent-primary mb-2 text-center">Scan Results</h1>
+                    <p className="text-vav-text-secondary mb-6 text-center">The AI identified the following item(s). Save the one that looks correct to get a full analysis.</p>
+                    
+                    {error && <p className="text-red-500 text-sm my-4 text-center bg-red-100 p-3 rounded-md">{error}</p>}
+                    
+                    <div className="space-y-4">
+                        {scanResults.map((item, index) => (
+                            <div key={index} className="bg-vav-background p-4 rounded-lg border border-vav-accent-primary/20">
+                                <h3 className="text-xl font-bold text-vav-text">{item.make} {item.model}</h3>
+                                <p className="text-sm text-vav-text-secondary mt-1"><strong>Initial Observation:</strong> {item.conditionDescription}</p>
+                                <button
+                                    onClick={() => handleSaveFind(item)}
+                                    disabled={isSaving}
+                                    className="mt-4 w-full bg-green-600 text-white font-bold py-2 px-4 rounded-md shadow-md disabled:opacity-50 hover:bg-green-700 transition-colors"
+                                >
+                                    {isSaving ? 'Analyzing & Saving...' : 'Analyze & Save this Find'}
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="mt-8 text-center">
+                        <button
+                            onClick={handleStartOver}
+                             className="bg-vav-accent-primary text-vav-background font-semibold py-2 px-6 rounded-md shadow-md hover:bg-vav-accent-secondary transition-colors"
+                        >
+                            Scan Another Image
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
     return (
         <div className="w-full max-w-2xl mx-auto p-4">
             <div className="bg-vav-content-card shadow-xl rounded-lg p-6 md:p-8 text-center">
@@ -72,7 +184,6 @@ const WildFindPage = () => {
                     Spotted some vintage gear in the wild? Take a picture and let the AI tell you what it is.
                 </p>
 
-                {/* --- NEW: Instructional Text Box --- */}
                 <div className="bg-vav-background border border-vav-accent-primary/30 rounded-lg p-4 my-6 text-left text-sm">
                     <div className="flex items-start">
                         <IoInformationCircleOutline className="h-5 w-5 text-vav-accent-primary mr-3 mt-0.5 flex-shrink-0" />

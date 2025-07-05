@@ -71,7 +71,8 @@ const SavedFindsPage = () => {
                 {find.findType}
               </div>
 
-              <Link to={`/wild-find-details/${find._id}`} className="flex flex-col h-full p-4">
+              {/* --- FIXED: Corrected the URL path in the 'to' prop --- */}
+              <Link to={`/saved-finds/${find._id}`} className="flex flex-col h-full p-4">
                 <img
                   src={find.imageUrl}
                   alt={getFindTitle(find)}
