@@ -14,7 +14,7 @@ const {
   getComprehensiveWildFindAnalysis,
   analyzeAdText,
   getAdPriceComparisonInsight,
-  getAiValueInsight,
+  getAiValueInsight, // This was previously incorrect in the exports list but is likely correct here
   getRelatedGearSuggestions,
   uploadToGcs,
   deleteFromGcs,
@@ -472,24 +472,31 @@ router.post(
     try {
       const textAnalysis = await analyzeAdText(adTitle, adDescription);
       const visualAnalysisArray = await getVisualAnalysis(req.file);
+
       if (!visualAnalysisArray || visualAnalysisArray.length === 0) {
         return res
           .status(404)
           .json({ message: 'AI could not identify the item from the image.' });
       }
+
       const visualAnalysis = visualAnalysisArray[0];
-      const identifiedMake = visualAnalysis.make !== 'Unidentified Make'
-        ? visualAnalysis.make
-        : textAnalysis.extractedMake;
-      const identifiedModel = visualAnalysis.model !==
-        'Model Not Clearly Identifiable'
-        ? visualAnalysis.model
-                : textAnalysis.extractedModel;
-      const valueInsight = await getAiValueeinstein(
+
+      const identifiedMake =
+        visualAnalysis.make !== 'Unidentified Make'
+          ? visualAnalysis.make
+          : textAnalysis.extractedMake;
+      const identifiedModel =
+        visualAnalysis.model !== 'Model Not Clearly Identifiable'
+          ? visualAnalysis.model
+          : textAnalysis.extractedModel;
+
+      //  FIXED: Corrected function name from getAiValueeinstein to getAiValueInsight
+      const valueInsight = await getAiValueInsight(
         identifiedMake,
         identifiedModel,
         visualAnalysis.conditionDescription
       );
+
       const priceComparison = await getAdPriceComparisonInsight(
         valueInsight.estimatedValueUSD,
         askingPrice,
@@ -498,6 +505,7 @@ router.post(
         visualAnalysis.conditionDescription,
         textAnalysis
       );
+      
       const finalReport = {
         gcsUrl: req.gcsUrl,
         identifiedMake,
@@ -510,6 +518,8 @@ router.post(
       };
       res.status(200).json(finalReport);
     } catch (error) {
+      // FIXED: Added detailed error logging to the console
+      console.error('Error during AI ad analysis:', error); 
       res
         .status(500)
         .json({
