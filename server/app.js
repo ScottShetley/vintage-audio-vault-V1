@@ -15,19 +15,28 @@ const userRoutes = require ('./routes/userRoutes');
 const app = express ();
 const PORT = process.env.PORT || 5000;
 
-// --- NEW: CORS Configuration for Production ---
+// --- FINAL: CORS Configuration for Production ---
 const allowedOrigins = [
   'http://localhost:5173',
-  'https://vav-final-project.onrender.com', // <-- Incorrect Placeholder
+  'https://vintage-audio-vault.onrender.com',
 ];
 
 const corsOptions = {
   origin: function (origin, callback) {
-    if (!origin || allowedOrigins.indexOf (origin) !== -1) {
-      callback (null, true);
-    } else {
-      callback (new Error ('Not allowed by CORS'));
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback (null, true);
+
+    // Check if the origin is in our list
+    if (allowedOrigins.indexOf (origin) !== -1) {
+      return callback (null, true);
     }
+
+    // If not in the list, block the request
+    return callback (
+      new Error (
+        'The CORS policy for this site does not allow access from the specified Origin.'
+      )
+    );
   },
   credentials: true,
 };
