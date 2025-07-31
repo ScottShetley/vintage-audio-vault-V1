@@ -10,13 +10,32 @@ const {GoogleGenerativeAI} = require ('@google/generative-ai');
 const authRoutes = require ('./routes/authRoutes');
 const audioItemRoutes = require ('./routes/audioItemRoutes');
 const wildFindRoutes = require ('./routes/wildFindRoutes');
-const userRoutes = require ('./routes/userRoutes'); // --- THIS LINE IS MISSING ---
+const userRoutes = require ('./routes/userRoutes');
 
 const app = express ();
 const PORT = process.env.PORT || 5000;
 
+// --- NEW: CORS Configuration for Production ---
+const allowedOrigins = [
+  'http://localhost:5173', // Your Vite frontend development server
+  'https://vav-final-project.onrender.com', // Placeholder for your live frontend URL
+];
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.indexOf (origin) !== -1) {
+      callback (null, true);
+    } else {
+      callback (new Error ('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+};
+
+app.use (cors (corsOptions));
+// --- End of CORS Configuration ---
+
 app.use (express.json ());
-app.use (cors ());
 
 app.use ((req, res, next) => {
   console.log (
@@ -75,7 +94,7 @@ if (geminiApiKey) {
 app.use ('/api/auth', authRoutes);
 app.use ('/api/items', audioItemRoutes);
 app.use ('/api/wild-finds', wildFindRoutes);
-app.use ('/api/users', userRoutes); // --- THIS LINE IS MISSING ---
+app.use ('/api/users', userRoutes);
 
 // Basic test route
 app.get ('/', (req, res) => {
