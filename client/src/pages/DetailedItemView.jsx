@@ -108,6 +108,20 @@ const DetailedItemView = () => {
     }
   };
 
+  // --- NEW: Helper to get color class based on confidence score ---
+  const getConfidenceClass = (confidence) => {
+    switch (confidence?.toLowerCase()) {
+      case 'high':
+        return 'text-green-400';
+      case 'medium':
+        return 'text-yellow-400';
+      case 'low':
+        return 'text-orange-400';
+      default:
+        return 'text-vav-text';
+    }
+  };
+
   if (loading) {
     return <div className="text-center p-8">Loading item details...</div>;
   }
@@ -121,6 +135,7 @@ const DetailedItemView = () => {
   }
 
   const isOwner = currentUser && item.user && currentUser._id === item.user._id;
+  const confidenceScore = item.identification?.confidence;
 
   return (
     <div className="w-full max-w-4xl mx-auto p-4">
@@ -137,7 +152,6 @@ const DetailedItemView = () => {
           </Link>
         </div>
 
-        {/* --- NEW: Listing Status Tags --- */}
         <div className="mb-6 flex flex-wrap items-center gap-3">
             {item.isForSale && (
                 <div className="inline-flex items-center bg-green-800 bg-opacity-50 text-green-300 border border-green-700 rounded-full px-4 py-2">
@@ -203,6 +217,17 @@ const DetailedItemView = () => {
             <p className="text-vav-text-secondary">Fully Functional:</p>
             <p className="text-vav-text font-medium">{item.isFullyFunctional ? 'Yes' : 'No'}</p>
           </div>
+          
+          {/* --- NEW: Conditionally display the AI Confidence Score --- */}
+          {confidenceScore && (
+            <div>
+              <p className="text-vav-text-secondary">AI Identification Confidence:</p>
+              <p className={`font-bold ${getConfidenceClass(confidenceScore)}`}>
+                {confidenceScore}
+              </p>
+            </div>
+          )}
+
           {!item.isFullyFunctional && item.issuesDescription && (
             <div>
               <p className="text-vav-text-secondary">Issues Description:</p>

@@ -49,7 +49,7 @@ const audioItemSchema = new mongoose.Schema (
           'Amplifier',
           'Pre-amplifier',
           'Tape Deck',
-          'Reel to Reel', 
+          'Reel to Reel',
           'CD Player',
           'Equalizer',
           'Tuner',
@@ -107,6 +107,8 @@ const audioItemSchema = new mongoose.Schema (
       wasCorrected: {type: Boolean, default: false},
       userInput: {type: String, default: ''},
       aiIdentifiedAs: {type: String, default: ''},
+      // --- NEW: Field to store the AI's confidence level ---
+      confidence: {type: String, default: ''},
     },
 
     aiAnalysis: {
@@ -124,6 +126,7 @@ const audioItemSchema = new mongoose.Schema (
 );
 
 // --- This part prevents Mongoose from recompiling the model if it already exists ---
-const AudioItem = mongoose.models.AudioItem || mongoose.model('AudioItem', audioItemSchema);
+const AudioItem =
+  mongoose.models.AudioItem || mongoose.model ('AudioItem', audioItemSchema);
 
 module.exports = AudioItem;

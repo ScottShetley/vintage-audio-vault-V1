@@ -1,6 +1,6 @@
 // client/src/components/AiAnalysisDisplay.jsx
 import React, { useState } from 'react';
-import { IoChevronDown } from 'react-icons/io5';
+import { IoChevronDown, IoWarningOutline } from 'react-icons/io5';
 
 // A helper component for each collapsible section to reduce repetition
 const AccordionSection = ({ title, children, isOpen, setIsOpen }) => (
@@ -45,6 +45,27 @@ const AiAnalysisDisplay = ({ analysis }) => {
 
   if (!analysis) {
     return null;
+  }
+
+  // --- NEW: Check for an incomplete or failed analysis from the AI ---
+  const isAnalysisIncomplete = 
+    analysis.summary?.includes('could not be completed') ||
+    analysis.valueInsight?.estimatedValueUSD === 'Error';
+
+  // --- NEW: Render a user-friendly message if the analysis is incomplete ---
+  if (isAnalysisIncomplete) {
+    return (
+        <div className="bg-vav-background rounded-lg shadow-inner overflow-hidden p-6 text-center">
+            <IoWarningOutline className="mx-auto h-12 w-12 text-yellow-500 mb-4" />
+            <h3 className="text-xl font-semibold text-vav-text mb-2">AI Analysis Incomplete</h3>
+            <p className="text-vav-text-secondary">
+                The AI could not confidently identify this item from the provided photo.
+            </p>
+            <p className="text-vav-text-secondary mt-2">
+                For best results, please try again with a clear, well-lit photo of the item's front panel, or edit the item to enter the make and model manually.
+            </p>
+        </div>
+    );
   }
 
   return (

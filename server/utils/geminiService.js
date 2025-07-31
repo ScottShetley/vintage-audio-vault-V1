@@ -246,6 +246,7 @@ For each item, provide:
 1.  Manufacturer (make): Be as specific as possible. If the make is not clearly visible or known with high confidence, you MUST return "Unidentified Make".
 2.  Model name/number (model): Be as specific as possible. Avoid generic terms. If a specific model is not clearly visible on the unit, you MUST return "Model Not Clearly Identifiable". Do not infer the model from the make alone.
 3.  Visual Condition (conditionDescription): A detailed, objective description of the item's visual condition based only on what is visible in the image.
+4.  Confidence Level (confidence): Your confidence in the identification, rated as "High", "Medium", or "Low".
 
 Return your response as an array of objects in the specified JSON format.
 If you cannot identify any items, return an empty array.`;
@@ -267,8 +268,12 @@ If you cannot identify any items, return an empty array.`;
           type: 'STRING',
           description: "A detailed description of the item's visual condition.",
         },
+        confidence: {
+          type: 'STRING',
+          description: 'The confidence level of the identification (High, Medium, or Low).',
+        },
       },
-      required: ['make', 'model', 'conditionDescription'],
+      required: ['make', 'model', 'conditionDescription', 'confidence'],
     },
   };
 

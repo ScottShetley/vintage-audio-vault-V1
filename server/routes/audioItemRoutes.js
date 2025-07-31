@@ -211,6 +211,7 @@ router.post(
         wasCorrected: false,
         userInput: `${userInput.make} ${userInput.model}`,
         aiIdentifiedAs: '',
+        confidence: '', // <-- Initialize confidence field
       };
 
       let finalMake = userInput.make;
@@ -220,6 +221,10 @@ router.post(
         const visualAnalysisArray = await getVisualAnalysis(primaryImageForAnalysis);
         if (visualAnalysisArray && visualAnalysisArray.length > 0) {
           const aiIdentified = visualAnalysisArray[0];
+          
+          // --- NEW: Save the confidence score from the AI analysis ---
+          identification.confidence = aiIdentified.confidence || 'Medium';
+
           const aiIsConfident =
             aiIdentified.make !== 'Unidentified Make' &&
             aiIdentified.model !== 'Model Not Clearly Identifiable';
