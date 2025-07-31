@@ -577,7 +577,7 @@ async function getAiValueInsight (make, model, condition, imageUrls = []) {
     parts.push ({text: '\nNo images provided.'});
   }
   try {
-    const result = await valueInsightModel.generateContent ({
+    const result = await proModel.generateContent ({
       contents: [{role: 'user', parts: parts}],
     });
     const parsedResponse = JSON.parse (result.response.text ());
@@ -635,7 +635,7 @@ async function getRelatedGearSuggestions (
     parts.push ({text: '\nNo images provided for suggestions.'});
   }
   try {
-    const result = await suggestionsModel.generateContent ({
+    const result = await proModel.generateContent ({
       contents: [{role: 'user', parts: parts}],
     });
     return JSON.parse (result.response.text ());
@@ -659,7 +659,6 @@ async function getRelatedGearSuggestions (
 }
 
 // --- GCS HELPER FUNCTIONS ---
-// This function has been rewritten to align with the bucket's "Uniform Access" setting.
 const uploadToGcs = async (file, bucketName, storage) => {
   if (!file || !file.buffer) {
     console.error ('UploadToGcs Error: Invalid or empty file object provided.');
@@ -667,13 +666,15 @@ const uploadToGcs = async (file, bucketName, storage) => {
   }
 
   const bucket = storage.bucket (bucketName);
-  const blob = bucket.file (
-    `audio-items/${Date.now ()}-${file.originalname.replace (/ /g, '_')}`
-  );
+
+  // Sanitize the filename to remove characters that are not URL-friendly
+  // This replaces anything that isn't a letter, number, dot, underscore, or hyphen with an underscore.
+  const sanitizedFilename = file.originalname.replace (/[^\w.-]/g, '_');
+
+  const blob = bucket.file (`audio-items/${Date.now ()}-${sanitizedFilename}`);
 
   try {
     // With Uniform bucket-level access, we only need to save the file.
-    // It will automatically be public. We must remove the .makePublic() call.
     await blob.save (file.buffer, {
       metadata: {
         contentType: file.mimetype,
