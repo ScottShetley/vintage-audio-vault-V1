@@ -58,7 +58,8 @@ async function getAiFullAnalysisForCollectionItem (itemData) {
     
     You are also provided with one image of the item.
 
-    Your Task: Generate a complete analysis as a single JSON object. The report must include all of the following fields:
+    Your Task: Generate a complete analysis as a single JSON object. The report must include all of the following fields.
+    CRITICAL INSTRUCTION: Base your analysis ONLY on the provided information and your established knowledge base for the specific make and model. Do not invent features or speculate on aspects not typical for this item.
 
     1. "summary": A compelling, single-sentence summary of the item's reputation and significance.
     2. "detailedAnalysis": A detailed, multi-paragraph description covering the item's history, design philosophy, build quality, sound signature, and its place in the vintage audio market.
@@ -239,11 +240,12 @@ async function getVisualAnalysis (fileObject) {
     },
   };
 
-  const prompt = `Analyze the provided image to identify ALL distinct pieces of vintage audio equipment shown.
+  const prompt = `You are a factual, precise visual analysis AI. Your single most important rule is: DO NOT GUESS OR INVENT INFORMATION.
+Analyze the provided image to identify ALL distinct pieces of vintage audio equipment shown.
 For each item, provide:
-1.  Manufacturer (make): Be as specific as possible. If entirely undeterminable, use "Unidentified Make".
-2.  Model name/number (model): Be as specific as possible. Avoid generic terms like 'Unknown'. If a specific model cannot be determined despite your best effort, use "Model Not Clearly Identifiable".
-3.  Visual Condition (conditionDescription): A detailed description of the item's visual condition.
+1.  Manufacturer (make): Be as specific as possible. If the make is not clearly visible or known with high confidence, you MUST return "Unidentified Make".
+2.  Model name/number (model): Be as specific as possible. Avoid generic terms. If a specific model is not clearly visible on the unit, you MUST return "Model Not Clearly Identifiable". Do not infer the model from the make alone.
+3.  Visual Condition (conditionDescription): A detailed, objective description of the item's visual condition based only on what is visible in the image.
 
 Return your response as an array of objects in the specified JSON format.
 If you cannot identify any items, return an empty array.`;
@@ -276,6 +278,7 @@ If you cannot identify any items, return an empty array.`;
       generationConfig: {
         responseMimeType: 'application/json',
         responseSchema: schema,
+        temperature: 0.2,
       },
     });
     return JSON.parse (result.response.text ());
