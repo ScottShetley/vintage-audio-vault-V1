@@ -3,8 +3,8 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import AiAnalysisDisplay from '../components/AiAnalysisDisplay';
-import ImageCarousel from '../components/ImageCarousel'; // <-- IMPORT the new component
-import { IoInformationCircle, IoPricetag } from 'react-icons/io5';
+import ImageCarousel from '../components/ImageCarousel';
+import { IoInformationCircle, IoPricetag, IoSwapHorizontal } from 'react-icons/io5';
 
 const DetailedItemView = () => {
   const navigate = useNavigate();
@@ -125,11 +125,10 @@ const DetailedItemView = () => {
   return (
     <div className="w-full max-w-4xl mx-auto p-4">
       <div className="bg-vav-content-card shadow-xl rounded-lg p-6 md:p-8">
-        <div className="flex flex-col md:flex-row justify-between items-start mb-2 gap-4">
+        <div className="flex flex-col md:flex-row justify-between items-start mb-4 gap-4">
           <h1 className="text-3xl font-serif text-vav-accent-primary text-center md:text-left">
             {item.make} {item.model}
           </h1>
-          {/* VAV-UPDATE: Changed link to go to /discover instead of /marketplace */}
           <Link
             to="/discover"
             className="text-vav-accent-primary hover:text-vav-accent-secondary transition-colors flex-shrink-0"
@@ -138,14 +137,27 @@ const DetailedItemView = () => {
           </Link>
         </div>
 
-        {item.status === 'For Sale' && (
-          <div className="mb-6">
-            <div className="inline-flex items-center bg-green-800 bg-opacity-50 text-green-300 border border-green-700 rounded-full px-4 py-2">
-              <IoPricetag className="mr-2" />
-              <span className="font-bold">For Sale: ${item.askingPrice?.toFixed(2)}</span>
-            </div>
-          </div>
-        )}
+        {/* --- NEW: Listing Status Tags --- */}
+        <div className="mb-6 flex flex-wrap items-center gap-3">
+            {item.isForSale && (
+                <div className="inline-flex items-center bg-green-800 bg-opacity-50 text-green-300 border border-green-700 rounded-full px-4 py-2">
+                    <IoPricetag className="mr-2" />
+                    <span className="font-bold">For Sale: ${item.askingPrice?.toFixed(2)}</span>
+                </div>
+            )}
+            {item.isOpenToTrade && (
+                <div className="inline-flex items-center bg-blue-800 bg-opacity-50 text-blue-300 border border-blue-700 rounded-full px-4 py-2">
+                    <IoSwapHorizontal className="mr-2" />
+                    <span className="font-bold">Open to Trade</span>
+                </div>
+            )}
+            {!item.isForSale && !item.isOpenToTrade && (
+                 <div className="inline-flex items-center bg-gray-700 bg-opacity-50 text-gray-300 border border-gray-600 rounded-full px-4 py-2">
+                    <span className="font-bold">In Personal Collection</span>
+                </div>
+            )}
+        </div>
+
 
         {isOwner && item.identification && item.identification.wasCorrected && (
           <div className="bg-yellow-900 bg-opacity-30 border-l-4 border-yellow-500 text-yellow-200 p-4 my-6 rounded-r-lg shadow" role="alert">
@@ -173,8 +185,6 @@ const DetailedItemView = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 mb-8 text-sm">
           <div className="md:col-span-2 mb-4">
             <h3 className="text-xl font-serif text-vav-text-secondary mb-3">Photo(s)</h3>
-            {/* --- THIS IS THE CHANGE --- */}
-            {/* The old img tag is replaced with our new ImageCarousel component */}
             <ImageCarousel photos={item.photoUrls} />
           </div>
           <div>

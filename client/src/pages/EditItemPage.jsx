@@ -12,7 +12,8 @@ const EditItemPage = () => {
   const [model, setModel] = useState('');
   const [itemType, setItemType] = useState('Receiver');
   const [condition, setCondition] = useState('Mint');
-  const [status, setStatus] = useState('Personal Collection');
+  const [isForSale, setIsForSale] = useState(false);
+  const [isOpenToTrade, setIsOpenToTrade] = useState(false);
   const [privacy, setPrivacy] = useState('Public');
   const [askingPrice, setAskingPrice] = useState('');
   const [isFullyFunctional, setIsFullyFunctional] = useState(true);
@@ -27,8 +28,14 @@ const EditItemPage = () => {
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
 
-  const itemTypeOptions = ['Receiver', 'Turntable', 'Speakers', 'Amplifier', 'Pre-amplifier', 'Tape Deck', 'CD Player', 'Equalizer', 'Tuner', 'Integrated Amplifier', 'Other'];
+  const itemTypeOptions = ['Receiver', 'Turntable', 'Speakers', 'Amplifier', 'Pre-amplifier', 'Tape Deck', 'Reel to Reel', 'CD Player', 'Equalizer', 'Tuner', 'Integrated Amplifier', 'Other'];
   const conditionOptions = ['Mint', 'Near Mint', 'Excellent', 'Very Good', 'Good', 'Fair', 'For Parts/Not Working', 'Restored'];
+
+  useEffect(() => {
+    if (isForSale || isOpenToTrade) {
+      setPrivacy('Public');
+    }
+  }, [isForSale, isOpenToTrade]);
 
   useEffect(() => {
     const fetchItemDetails = async () => {
@@ -43,7 +50,7 @@ const EditItemPage = () => {
       }
 
       try {
-        const response = await axios.get(`/api/items/${id}`, { // Using relative path for proxy
+        const response = await axios.get(`/api/items/${id}`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -54,7 +61,8 @@ const EditItemPage = () => {
         setModel(itemData.model || '');
         setItemType(itemData.itemType || 'Receiver');
         setCondition(itemData.condition || 'Mint');
-        setStatus(itemData.status || 'Personal Collection');
+        setIsForSale(itemData.isForSale || false);
+        setIsOpenToTrade(itemData.isOpenToTrade || false);
         setPrivacy(itemData.privacy || 'Public');
         setAskingPrice(itemData.askingPrice || '');
         setIsFullyFunctional(itemData.isFullyFunctional ?? true);
@@ -100,10 +108,11 @@ const EditItemPage = () => {
     formData.append('model', model);
     formData.append('itemType', itemType);
     formData.append('condition', condition);
-    formData.append('status', status);
+    formData.append('isForSale', isForSale);
+    formData.append('isOpenToTrade', isOpenToTrade);
     formData.append('privacy', privacy);
     
-    if (status === 'For Sale') {
+    if (isForSale) {
         formData.append('askingPrice', askingPrice);
     }
     formData.append('isFullyFunctional', isFullyFunctional);
@@ -114,12 +123,14 @@ const EditItemPage = () => {
       formData.append('photos', newPhotos[i]);
     }
     
-    // --- THIS IS THE FIX ---
-    // Send the array of remaining existing photos so the backend knows which ones to keep.
-    formData.append('existingImageUrls', JSON.stringify(existingPhotoUrls));
+    // --- BUG FIX ---
+    // This line is essential. It tells the backend which existing photos
+    // to keep. Without it, the backend doesn't know if any photos were
+    // removed, and it can cause the file upload middleware to fail.
+    formData.append('existingPhotoUrls', JSON.stringify(existingPhotoUrls));
 
     try {
-      await axios.put(`/api/items/${id}`, formData, { // Using relative path for proxy
+      await axios.put(`/api/items/${id}`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
           Authorization: `Bearer ${token}`,
@@ -145,6 +156,7 @@ const EditItemPage = () => {
 
   const inputClass = "mt-1 block w-full px-3 py-2 bg-vav-content-card border border-vav-accent-primary rounded-md shadow-sm focus:outline-none focus:ring-vav-accent-secondary focus:border-vav-accent-secondary sm:text-sm text-vav-text placeholder-vav-text-secondary";
   const labelClass = "block text-sm font-medium text-vav-text-secondary mb-1";
+  const checkboxClass = "h-4 w-4 text-vav-accent-primary bg-vav-content-card border-vav-accent-primary rounded focus:ring-vav-accent-secondary";
   const placeholderImageUrl = 'https://placehold.co/100x100/2C2C2C/E0E0E0?text=No+Image';
 
   if (initialLoading) {
@@ -168,6 +180,35 @@ const EditItemPage = () => {
       </div>
 
       <form onSubmit={handleSubmit} className="bg-vav-content-card shadow-xl rounded-lg p-6 md:p-8 space-y-6">
+        
+        <div className="space-y-4 rounded-lg bg-vav-background p-4">
+            <label className={labelClass}>Listing Options</label>
+            <div className="flex items-center">
+                <input
+                    id="isForSale"
+                    type="checkbox"
+                    checked={isForSale}
+                    onChange={(e) => setIsForSale(e.target.checked)}
+                    className={checkboxClass}
+                />
+                <label htmlFor="isForSale" className="ml-3 block text-sm text-vav-text">
+                    List this item for sale
+                </label>
+            </div>
+            <div className="flex items-center">
+                <input
+                    id="isOpenToTrade"
+                    type="checkbox"
+                    checked={isOpenToTrade}
+                    onChange={(e) => setIsOpenToTrade(e.target.checked)}
+                    className={checkboxClass}
+                />
+                <label htmlFor="isOpenToTrade" className="ml-3 block text-sm text-vav-text">
+                    Open to trades for this item
+                </label>
+            </div>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label htmlFor="make" className={labelClass}>Make <span className="text-red-500">*</span></label>
@@ -196,23 +237,24 @@ const EditItemPage = () => {
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-                <label htmlFor="status" className={labelClass}>Status</label>
-                <select id="status" value={status} onChange={(e) => setStatus(e.target.value)} className={inputClass}>
-                    <option value="Personal Collection">Personal Collection</option>
-                    <option value="For Sale">For Sale</option>
-                    <option value="For Trade">For Trade</option>
-                </select>
-            </div>
-            <div>
-                <label htmlFor="privacy" className={labelClass}>Privacy</label>
-                <select id="privacy" value={privacy} onChange={(e) => setPrivacy(e.target.value)} className={inputClass}>
+                <label htmlFor="privacy" className={labelClass}>Visibility</label>
+                <select 
+                    id="privacy" 
+                    value={privacy} 
+                    onChange={(e) => setPrivacy(e.target.value)} 
+                    className={`${inputClass} disabled:bg-vav-background-alt disabled:cursor-not-allowed`}
+                    disabled={isForSale || isOpenToTrade}
+                >
                     <option value="Public">Public (Visible to others)</option>
                     <option value="Private">Private (Visible only to you)</option>
                 </select>
+                {(isForSale || isOpenToTrade) && (
+                    <p className="text-xs text-vav-text-secondary mt-1">Items for sale or trade must be public.</p>
+                )}
             </div>
         </div>
         
-        {status === 'For Sale' && (
+        {isForSale && (
             <div>
                 <label htmlFor="askingPrice" className={labelClass}>Asking Price ($)</label>
                 <input 
@@ -224,6 +266,7 @@ const EditItemPage = () => {
                     placeholder="e.g., 450.00"
                     min="0"
                     step="0.01"
+                    required
                 />
             </div>
         )}
@@ -235,7 +278,7 @@ const EditItemPage = () => {
               type="checkbox"
               checked={isFullyFunctional}
               onChange={(e) => setIsFullyFunctional(e.target.checked)}
-              className="h-4 w-4 text-vav-accent-primary"
+              className={checkboxClass}
             />
             <label htmlFor="isFullyFunctional" className="ml-2 block text-sm text-vav-text">
               Fully Functional?

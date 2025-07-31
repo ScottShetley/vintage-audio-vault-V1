@@ -1,5 +1,4 @@
-// client/src/components/ImageCarousel.jsx
-
+// client/src/components/ImageCarousel.jsx -- FINAL FIX
 import React, { useState } from 'react';
 import { IoChevronBack, IoChevronForward } from 'react-icons/io5';
 
@@ -7,7 +6,6 @@ const ImageCarousel = ({ photos }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const placeholderImageUrl = 'https://placehold.co/600x400/2C2C2C/E0E0E0?text=No+Image';
 
-  // Use photos if available, otherwise use a placeholder
   const imageSources = photos && photos.length > 0 ? photos : [placeholderImageUrl];
 
   const goToPrevious = () => {
@@ -22,45 +20,44 @@ const ImageCarousel = ({ photos }) => {
     setCurrentIndex(newIndex);
   };
 
-  // Do not render buttons if there's only one image
+  const handleImageError = (e) => {
+    e.target.onerror = null; // Prevent infinite loop if placeholder also fails
+    e.target.src = placeholderImageUrl;
+  };
+
   const showButtons = imageSources.length > 1;
 
   return (
-    <div className="relative w-full h-auto max-h-96 aspect-video group">
-      {/* Main Image */}
-      <div
-        style={{ backgroundImage: `url(${imageSources[currentIndex]})` }}
-        className="w-full h-full bg-center bg-contain bg-no-repeat rounded-md shadow-sm"
-        onError={(e) => { e.target.onerror = null; e.target.src = placeholderImageUrl; }}
-      >
-        {/* This div is for display; the img tag below is for accessibility */}
-        <img src={imageSources[currentIndex]} alt={`Slide ${currentIndex + 1}`} className="sr-only" />
-      </div>
+    <div className="relative w-full aspect-video group bg-vav-background flex items-center justify-center rounded-lg shadow-sm">
+      {/* Main Image Display using <img> tag */}
+      <img
+        key={currentIndex} // Add key to force re-render on change if needed
+        src={imageSources[currentIndex]}
+        alt={`Item view ${currentIndex + 1}`}
+        onError={handleImageError}
+        className="max-w-full max-h-full object-contain"
+      />
 
       {/* Left Arrow */}
       {showButtons && (
-        <div className="absolute top-1/2 left-0 transform -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-          <button
-            onClick={goToPrevious}
-            className="bg-black bg-opacity-40 text-white p-2 rounded-full hover:bg-opacity-60 focus:outline-none"
-            aria-label="Previous Image"
-          >
-            <IoChevronBack size={24} />
-          </button>
-        </div>
+        <button
+          onClick={goToPrevious}
+          className="absolute top-1/2 left-2 transform -translate-y-1/2 bg-black bg-opacity-40 text-white p-2 rounded-full hover:bg-opacity-60 focus:outline-none opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+          aria-label="Previous Image"
+        >
+          <IoChevronBack size={24} />
+        </button>
       )}
 
       {/* Right Arrow */}
       {showButtons && (
-        <div className="absolute top-1/2 right-0 transform -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-          <button
-            onClick={goToNext}
-            className="bg-black bg-opacity-40 text-white p-2 rounded-full hover:bg-opacity-60 focus:outline-none"
-            aria-label="Next Image"
-          >
-            <IoChevronForward size={24} />
-          </button>
-        </div>
+        <button
+          onClick={goToNext}
+          className="absolute top-1/2 right-2 transform -translate-y-1/2 bg-black bg-opacity-40 text-white p-2 rounded-full hover:bg-opacity-60 focus:outline-none opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+          aria-label="Next Image"
+        >
+          <IoChevronForward size={24} />
+        </button>
       )}
 
       {/* Image Counter */}

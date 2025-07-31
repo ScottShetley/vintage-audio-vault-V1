@@ -7,14 +7,13 @@ const { protect } = require('../middleware/authMiddleware');
 const AudioItem = require('../models/AudioItem');
 const WildFind = require('../models/wildFind');
 
-// ... (rest of the imports remain the same)
 const {
   getAiFullAnalysisForCollectionItem,
   getVisualAnalysis,
   getComprehensiveWildFindAnalysis,
   analyzeAdText,
   getAdPriceComparisonInsight,
-  getAiValueInsight, // This was previously incorrect in the exports list but is likely correct here
+  getAiValueInsight,
   getRelatedGearSuggestions,
   uploadToGcs,
   deleteFromGcs,
@@ -23,8 +22,6 @@ const {
 
 const router = express.Router();
 
-// ... (Multer and GCS middleware remain the same)
-// --- Multer Configurations ---
 const uploadMultiple = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
@@ -45,9 +42,8 @@ const uploadWildFind = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
 }).single('image');
 
-// --- GCS Middleware ---
 const uploadToGcsMiddleware = async (req, res, next) => {
-  if (!req.files && !req.file) {
+  if (!req.file) {
     return next();
   }
   const gcs = req.app.locals.gcs;
@@ -55,14 +51,7 @@ const uploadToGcsMiddleware = async (req, res, next) => {
     return next(new Error('GCS configuration error.'));
   }
   try {
-    if (req.files && req.files.length > 0) {
-      const uploadPromises = req.files.map(file =>
-        uploadToGcs(file, gcs.bucketName, gcs.storage)
-      );
-      req.gcsUrls = await Promise.all(uploadPromises);
-    } else if (req.file) {
-      req.gcsUrl = await uploadToGcs(req.file, gcs.bucketName, gcs.storage);
-    }
+    req.gcsUrl = await uploadToGcs(req.file, gcs.bucketName, gcs.storage);
     next();
   } catch (error) {
     next(error);
@@ -77,8 +66,6 @@ router.get('/discover', protect, async (req, res) => {
     const limit = parseInt(req.query.limit, 10) || 20;
     const skip = (page - 1) * limit;
 
-    // --- UPDATED ---
-    // Create a Set of followed user IDs for efficient lookup.
     const followingIds = new Set(req.user.following.map(id => id.toString()));
 
     const audioItemsPromise = AudioItem.find({ privacy: 'Public' })
@@ -94,20 +81,19 @@ router.get('/discover', protect, async (req, res) => {
       wildFindsPromise,
     ]);
 
-    // --- UPDATED ---
     const normalizedAudioItems = audioItems.map(item => ({
       id: item._id,
       title: `${item.make} ${item.model}`,
       imageUrl: item.photoUrls?.[0],
-      tag: item.itemType,
+      isForSale: item.isForSale,
+      isOpenToTrade: item.isOpenToTrade,
       detailPath: `/item/${item._id}`,
       createdAt: item.createdAt,
       username: item.user?.username,
       userId: item.user?._id,
-      isFollowing: followingIds.has(item.user?._id.toString()), // Add the flag
+      isFollowing: followingIds.has(item.user?._id.toString()),
     }));
 
-    // --- UPDATED ---
     const normalizedWildFinds = wildFinds.map(find => {
       let title = 'Untitled Find';
       if (find.findType === 'Wild Find' && find.analysis?.identifiedItem) {
@@ -125,7 +111,7 @@ router.get('/discover', protect, async (req, res) => {
         createdAt: find.createdAt,
         username: find.userId?.username,
         userId: find.userId?._id,
-        isFollowing: followingIds.has(find.userId?._id.toString()), // Add the flag
+        isFollowing: followingIds.has(find.userId?._id.toString()),
       };
     });
 
@@ -143,7 +129,6 @@ router.get('/discover', protect, async (req, res) => {
   }
 });
 
-// ... (The rest of the routes in this file (GET, POST, PUT, DELETE, etc.) remain unchanged)
 // GET /api/items
 router.get('/', protect, async (req, res) => {
   try {
@@ -237,10 +222,15 @@ router.post(
           }
         }
       }
+      
+      const isForSale = req.body.isForSale === 'true';
+      const isOpenToTrade = req.body.isOpenToTrade === 'true';
 
       const newItemData = {
         user: req.user.id,
         ...req.body,
+        isForSale,
+        isOpenToTrade,
         isFullyFunctional: String(
           req.body.isFullyFunctional
         ).toLowerCase() === 'true',
@@ -248,7 +238,10 @@ router.post(
         identification: identification,
       };
       
-      if (newItemData.status !== 'For Sale') {
+      if (isForSale && req.body.askingPrice) {
+        const price = parseFloat(req.body.askingPrice);
+        newItemData.askingPrice = Math.round((price + Number.EPSILON) * 100) / 100;
+      } else {
         newItemData.askingPrice = undefined;
       }
 
@@ -284,41 +277,85 @@ router.post(
 router.put(
   '/:id',
   protect,
-  uploadMultiple,
-  uploadToGcsMiddleware,
+  uploadMultiple, 
   async (req, res) => {
+    // === START DIAGNOSTIC LOGGING ===
+    console.log(`\n--- DIAGNOSTICS FOR PUT /api/items/${req.params.id} ---`);
+    console.log('Timestamp:', new Date().toISOString());
+    console.log('1. Raw req.body (text fields):', req.body);
+    console.log('2. Raw req.files (multer processing):', req.files);
+    // === END DIAGNOSTIC LOGGING ===
+    
     try {
       const item = await AudioItem.findById(req.params.id);
       if (!item || item.user.toString() !== req.user.id) {
-        return res.status(404).json({ message: 'Item not found' });
+        return res.status(404).json({ message: 'Item not found or you do not have permission.' });
       }
 
-      const updateFields = { ...req.body };
+      // === START DIAGNOSTIC LOGGING ===
+      console.log('3. Item found in DB. Current photoUrls:', item.photoUrls);
+      // === END DIAGNOSTIC LOGGING ===
 
-      const existingImageUrls = req.body.existingImageUrls
-        ? JSON.parse(req.body.existingImageUrls)
-        : [];
-      const newImageUrls = req.gcsUrls || [];
-      updateFields.photoUrls = [...existingImageUrls, ...newImageUrls];
-      delete updateFields.existingImageUrls;
-
-      if (updateFields.hasOwnProperty('isFullyFunctional')) {
-        updateFields.isFullyFunctional =
-          String(updateFields.isFullyFunctional).toLowerCase() === 'true';
+      // --- IMAGE HANDLING LOGIC ---
+      if (req.body.existingPhotoUrls) {
+        item.photoUrls = JSON.parse(req.body.existingPhotoUrls);
+        console.log('4. photoUrls array AFTER processing deletions:', item.photoUrls);
+      } else {
+        item.photoUrls = [];
+        console.log('4. photoUrls array CLEARED as existingPhotoUrls was missing.');
+      }
+      
+      if (req.files && req.files.length > 0) {
+          const gcs = req.app.locals.gcs;
+          if (!gcs || !gcs.bucketName) {
+            throw new Error('GCS configuration error on server.');
+          }
+          const uploadPromises = req.files.map(file =>
+            uploadToGcs(file, gcs.bucketName, gcs.storage)
+          );
+          const newImageUrls = await Promise.all(uploadPromises);
+          console.log('5. Generated GCS URLs for new images:', newImageUrls);
+          item.photoUrls.push(...newImageUrls);
+          console.log('6. photoUrls array AFTER appending new images:', item.photoUrls);
+      }
+      
+      // --- TEXT & BOOLEAN FIELD HANDLING LOGIC ---
+      const safeHasProperty = (prop) => Object.prototype.hasOwnProperty.call(req.body, prop);
+      if (safeHasProperty('make')) item.make = req.body.make;
+      if (safeHasProperty('model')) item.model = req.body.model;
+      if (safeHasProperty('itemType')) item.itemType = req.body.itemType;
+      if (safeHasProperty('condition')) item.condition = req.body.condition;
+      if (safeHasProperty('privacy')) item.privacy = req.body.privacy;
+      if (safeHasProperty('notes')) item.notes = req.body.notes;
+      if (safeHasProperty('issuesDescription')) item.issuesDescription = req.body.issuesDescription;
+      if (safeHasProperty('isFullyFunctional')) {
+        item.isFullyFunctional = String(req.body.isFullyFunctional).toLowerCase() === 'true';
+      }
+      if (safeHasProperty('isForSale')) {
+        item.isForSale = String(req.body.isForSale).toLowerCase() === 'true';
+      }
+      if (safeHasProperty('isOpenToTrade')) {
+        item.isOpenToTrade = String(req.body.isOpenToTrade).toLowerCase() === 'true';
+      }
+      if (item.isForSale && safeHasProperty('askingPrice')) {
+        const price = parseFloat(req.body.askingPrice);
+        item.askingPrice = Math.round((price + Number.EPSILON) * 100) / 100;
+      } else if (!item.isForSale) {
+        item.askingPrice = null;
       }
 
-      if (updateFields.status && updateFields.status !== 'For Sale') {
-        updateFields.askingPrice = null;
-      }
+      const updatedItem = await item.save();
+      
+      console.log('7. Final item state saved to DB:', updatedItem);
+      console.log('--- END DIAGNOSTICS --- \n');
 
-      const updatedItem = await AudioItem.findByIdAndUpdate(
-        req.params.id,
-        { $set: updateFields },
-        { new: true, runValidators: true }
-      );
       res.json(updatedItem);
+
     } catch (error) {
       console.error('Error updating item:', error);
+      console.log('--- ERROR IN PUT /api/items/:id ---');
+      console.log(error);
+      console.log('--- END ERROR DIAGNOSTICS --- \n');
       res
         .status(500)
         .json({
@@ -473,7 +510,7 @@ router.post(
       const textAnalysis = await analyzeAdText(adTitle, adDescription);
       const visualAnalysisArray = await getVisualAnalysis(req.file);
 
-      if (!visualAnalysisArray || visualAnalysisArray.length === 0) {
+      if (!visualAnalysisArray || visualAnalysisArray.length > 0) {
         return res
           .status(404)
           .json({ message: 'AI could not identify the item from the image.' });
@@ -490,7 +527,6 @@ router.post(
           ? visualAnalysis.model
           : textAnalysis.extractedModel;
 
-      //  FIXED: Corrected function name from getAiValueeinstein to getAiValueInsight
       const valueInsight = await getAiValueInsight(
         identifiedMake,
         identifiedModel,
@@ -518,7 +554,6 @@ router.post(
       };
       res.status(200).json(finalReport);
     } catch (error) {
-      // FIXED: Added detailed error logging to the console
       console.error('Error during AI ad analysis:', error); 
       res
         .status(500)

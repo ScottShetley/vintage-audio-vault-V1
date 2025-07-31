@@ -1,5 +1,5 @@
 // client/src/pages/AddItemPage.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
 
@@ -11,9 +11,13 @@ const AddItemPage = () => {
   const [model, setModel] = useState('');
   const [itemType, setItemType] = useState('Receiver');
   const [condition, setCondition] = useState('Mint');
-  const [status, setStatus] = useState('Personal Collection');
+  
+  // --- UPDATED: Replaced listingStatus with specific boolean fields for checkboxes ---
+  const [isForSale, setIsForSale] = useState(false);
+  const [isOpenToTrade, setIsOpenToTrade] = useState(false);
+  
   const [privacy, setPrivacy] = useState('Public');
-  const [askingPrice, setAskingPrice] = useState(''); // <-- ADDED
+  const [askingPrice, setAskingPrice] = useState('');
   const [isFullyFunctional, setIsFullyFunctional] = useState(true);
   const [issuesDescription, setIssuesDescription] = useState('');
   const [notes, setNotes] = useState('');
@@ -24,17 +28,26 @@ const AddItemPage = () => {
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
 
-  const itemTypeOptions = ['Receiver', 'Turntable', 'Speakers', 'Amplifier', 'Pre-amplifier', 'Tape Deck', 'CD Player', 'Equalizer', 'Tuner', 'Integrated Amplifier', 'Other'];
+  const itemTypeOptions = ['Receiver', 'Turntable', 'Speakers', 'Amplifier', 'Pre-amplifier', 'Tape Deck', 'Reel to Reel', 'CD Player', 'Equalizer', 'Tuner', 'Integrated Amplifier', 'Other'];
   const conditionOptions = ['Mint', 'Near Mint', 'Excellent', 'Very Good', 'Good', 'Fair', 'For Parts/Not Working', 'Restored'];
+
+  // --- NEW: Effect to manage privacy based on sale/trade status ---
+  useEffect(() => {
+    if (isForSale || isOpenToTrade) {
+      setPrivacy('Public');
+    }
+  }, [isForSale, isOpenToTrade]);
+
 
   const clearForm = () => {
     setMake('');
     setModel('');
     setItemType('Receiver');
     setCondition('Mint');
-    setStatus('Personal Collection');
+    setIsForSale(false);
+    setIsOpenToTrade(false);
     setPrivacy('Public');
-    setAskingPrice(''); // <-- ADDED
+    setAskingPrice('');
     setIsFullyFunctional(true);
     setIssuesDescription('');
     setNotes('');
@@ -65,11 +78,14 @@ const AddItemPage = () => {
     formData.append('model', model);
     formData.append('itemType', itemType);
     formData.append('condition', condition);
-    formData.append('status', status);
+    
+    // --- UPDATED: Send the new boolean fields to the backend ---
+    formData.append('isForSale', isForSale);
+    formData.append('isOpenToTrade', isOpenToTrade);
+    
     formData.append('privacy', privacy);
-    // Conditionally append askingPrice only if status is 'For Sale'
-    if (status === 'For Sale') {
-      formData.append('askingPrice', askingPrice); // <-- ADDED
+    if (isForSale) {
+      formData.append('askingPrice', askingPrice);
     }
     formData.append('isFullyFunctional', isFullyFunctional);
 
@@ -90,12 +106,21 @@ const AddItemPage = () => {
         },
       });
 
-      console.log('Item added successfully:', response.data);
-      setSuccessMessage('Item added successfully! Redirecting to dashboard...');
-      clearForm();
-      setTimeout(() => {
-        navigate('/dashboard');
-      }, 2000);
+      const newItemId = response.data?._id;
+
+      if (newItemId) {
+        setSuccessMessage('Item added successfully! Redirecting...');
+        clearForm();
+        setTimeout(() => {
+          navigate(`/item/${newItemId}`);
+        }, 2000);
+      } else {
+        setError('Item created, but could not get ID for redirection.');
+        setTimeout(() => {
+            navigate('/dashboard');
+        }, 3000);
+      }
+
     } catch (err) {
       console.error('Failed to add item:', err);
       if (err.response && (err.response.status === 401 || err.response.status === 403)) {
@@ -111,6 +136,7 @@ const AddItemPage = () => {
 
   const inputClass = "mt-1 block w-full px-3 py-2 bg-vav-content-card border border-vav-accent-primary rounded-md shadow-sm focus:outline-none focus:ring-vav-accent-secondary focus:border-vav-accent-secondary sm:text-sm text-vav-text placeholder-vav-text-secondary";
   const labelClass = "block text-sm font-medium text-vav-text-secondary mb-1";
+  const checkboxClass = "h-4 w-4 text-vav-accent-primary bg-vav-content-card border-vav-accent-primary rounded focus:ring-vav-accent-secondary";
 
   return (
     <div className="w-full max-w-2xl mx-auto p-4">
@@ -125,6 +151,36 @@ const AddItemPage = () => {
       </div>
 
       <form onSubmit={handleSubmit} className="bg-vav-content-card shadow-xl rounded-lg p-6 md:p-8 space-y-6">
+        
+        {/* --- NEW: Checkbox controls for listing status --- */}
+        <div className="space-y-4 rounded-lg bg-vav-background p-4">
+            <label className={labelClass}>Listing Options</label>
+            <div className="flex items-center">
+                <input
+                    id="isForSale"
+                    type="checkbox"
+                    checked={isForSale}
+                    onChange={(e) => setIsForSale(e.target.checked)}
+                    className={checkboxClass}
+                />
+                <label htmlFor="isForSale" className="ml-3 block text-sm text-vav-text">
+                    List this item for sale
+                </label>
+            </div>
+            <div className="flex items-center">
+                <input
+                    id="isOpenToTrade"
+                    type="checkbox"
+                    checked={isOpenToTrade}
+                    onChange={(e) => setIsOpenToTrade(e.target.checked)}
+                    className={checkboxClass}
+                />
+                <label htmlFor="isOpenToTrade" className="ml-3 block text-sm text-vav-text">
+                    Open to trades for this item
+                </label>
+            </div>
+        </div>
+
         {/* Make and Model */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
@@ -154,27 +210,29 @@ const AddItemPage = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* --- UPDATED: Privacy is now conditional --- */}
             <div>
-                <label htmlFor="status" className={labelClass}>Status</label>
-                <select id="status" value={status} onChange={(e) => setStatus(e.target.value)} className={inputClass}>
-                    <option value="Personal Collection">Personal Collection</option>
-                    <option value="For Sale">For Sale</option>
-                    <option value="For Trade">For Trade</option>
-                </select>
-            </div>
-            <div>
-                <label htmlFor="privacy" className={labelClass}>Privacy</label>
-                <select id="privacy" value={privacy} onChange={(e) => setPrivacy(e.target.value)} className={inputClass}>
+                <label htmlFor="privacy" className={labelClass}>Visibility</label>
+                <select 
+                    id="privacy" 
+                    value={privacy} 
+                    onChange={(e) => setPrivacy(e.target.value)} 
+                    className={`${inputClass} disabled:bg-vav-background-alt disabled:cursor-not-allowed`}
+                    disabled={isForSale || isOpenToTrade}
+                >
                     <option value="Public">Public (Visible to others)</option>
                     <option value="Private">Private (Visible only to you)</option>
                 </select>
+                {(isForSale || isOpenToTrade) && (
+                    <p className="text-xs text-vav-text-secondary mt-1">Items for sale or trade must be public.</p>
+                )}
             </div>
         </div>
         
-        {/* --- ADDED: Conditional Asking Price Input --- */}
-        {status === 'For Sale' && (
+        {/* --- UPDATED: Conditional Asking Price Input --- */}
+        {isForSale && (
             <div>
-                <label htmlFor="askingPrice" className={labelClass}>Asking Price ($)</label>
+                <label htmlFor="askingPrice" className={labelClass}>Asking Price ($) <span className="text-red-500">*</span></label>
                 <input 
                     type="number" 
                     id="askingPrice" 
@@ -184,10 +242,10 @@ const AddItemPage = () => {
                     placeholder="e.g., 450.00"
                     min="0"
                     step="0.01"
+                    required
                 />
             </div>
         )}
-        {/* --- END ADDED --- */}
 
         {/* Functionality and Issues */}
         <div>
@@ -197,7 +255,7 @@ const AddItemPage = () => {
               type="checkbox"
               checked={isFullyFunctional}
               onChange={(e) => setIsFullyFunctional(e.target.checked)}
-              className="h-4 w-4 text-vav-accent-primary bg-vav-content-card border-vav-accent-primary rounded focus:ring-vav-accent-secondary"
+              className={checkboxClass}
             />
             <label htmlFor="isFullyFunctional" className="ml-2 block text-sm text-vav-text">
               Fully Functional?

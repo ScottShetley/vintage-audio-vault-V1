@@ -1,20 +1,11 @@
 // client/src/components/ItemCard.jsx
 import React from 'react';
 import { Link } from 'react-router-dom';
-
-// Define tagColors here so the component is self-contained
-const tagColors = {
-  'My Collection': 'bg-purple-600',
-  'Wild Find': 'bg-green-600',
-  'Ad Analysis': 'bg-blue-600',
-  // Add more as needed
-};
+import { IoPricetag, IoSwapHorizontal } from 'react-icons/io5';
 
 const ItemCard = ({ item }) => {
   const placeholderImageUrl = 'https://placehold.co/150x150/2C2C2C/E0E0E0?text=No+Image';
 
-  // --- NEW ---
-  // A simple, reusable tag for the "Following" status
   const FollowingTag = () => (
     <span className="ml-2 bg-blue-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
       Following
@@ -35,19 +26,28 @@ const ItemCard = ({ item }) => {
             onError={(e) => { e.target.onerror = null; e.target.src = placeholderImageUrl; }}
           />
         </Link>
-        {item.tag && (
-          <div className={`absolute top-2 right-2 text-xs font-bold px-2 py-1 rounded-full text-white ${tagColors[item.tag] || 'bg-gray-500'}`}>
-            {item.tag}
-          </div>
-        )}
+        
+        {/* --- NEW: Display tags for For Sale / For Trade --- */}
+        <div className="absolute top-2 right-2 flex flex-col items-end gap-y-2">
+            {item.isForSale && (
+                <div className="text-xs font-bold px-2 py-1 rounded-full text-white bg-green-600 flex items-center">
+                    <IoPricetag className="mr-1" />
+                    <span>For Sale</span>
+                </div>
+            )}
+            {item.isOpenToTrade && (
+                 <div className="text-xs font-bold px-2 py-1 rounded-full text-white bg-blue-600 flex items-center">
+                    <IoSwapHorizontal className="mr-1" />
+                    <span>For Trade</span>
+                </div>
+            )}
+        </div>
       </div>
       <div className="p-4 flex flex-col flex-grow">
         <h3 className="font-serif text-vav-accent-primary text-lg font-bold text-center">
           {item.title}
         </h3>
         
-        {/* --- UPDATED --- */}
-        {/* The username and the new tag are wrapped in a flex container for alignment */}
         {item.username && item.userId && (
           <div className="text-xs text-center text-vav-text-secondary mt-1 mb-2 flex items-center justify-center">
             <span>by <Link to={`/profile/${item.userId}`} className="hover:underline hover:text-vav-accent-secondary transition-colors">{item.username}</Link></span>

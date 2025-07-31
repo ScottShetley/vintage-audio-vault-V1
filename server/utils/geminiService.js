@@ -44,9 +44,6 @@ const flashModel = genAI.getGenerativeModel ({
   safetySettings: DEFAULT_SAFETY_SETTINGS,
 });
 
-// --- VAV-UPDATE ---
-// New "uber" function for generating a complete analysis when a user adds a new item
-// to their collection. This is designed to populate the "Intelligent Summary" component.
 async function getAiFullAnalysisForCollectionItem (itemData) {
   const {make, model, itemType, condition, notes, photoUrl} = itemData;
 
@@ -157,12 +154,6 @@ async function getAiFullAnalysisForCollectionItem (itemData) {
   }
 }
 
-// ===================================================================================
-//
-// ENHANCED "WILD FIND" ANALYSIS FUNCTION (SINGLE-STEP)
-//
-// ===================================================================================
-
 async function getComprehensiveWildFindAnalysis (
   make,
   model,
@@ -224,7 +215,6 @@ async function getComprehensiveWildFindAnalysis (
     return JSON.parse (responseText);
   } catch (error) {
     console.error ('Error in getComprehensiveWildFindAnalysis:', error);
-    // Return a structured error object that matches the schema to prevent frontend crashes
     return {
       error: `Gemini AI comprehensive analysis failed: ${error.message}`,
       identifiedItem: `${make} ${model}`,
@@ -237,8 +227,6 @@ async function getComprehensiveWildFindAnalysis (
     };
   }
 }
-
-// --- ORIGINAL WILD FIND ANALYSIS FUNCTIONS (MULTI-STEP) ---
 
 async function getVisualAnalysis (fileObject) {
   if (!fileObject || !fileObject.buffer || !fileObject.mimetype) {
@@ -395,8 +383,6 @@ Include a standard disclaimer. Return your response in the specified JSON format
   }
 }
 
-// --- NEW AI FUNCTIONS FOR AD ANALYZER ---
-
 async function analyzeAdText (adTitle, adDescription) {
   const prompt = `Analyze the following vintage audio equipment ad title and description.
 Your goal is to extract specific information.
@@ -460,7 +446,6 @@ Return your response in the specified JSON format. If a field cannot be determin
     return JSON.parse (result.response.text ());
   } catch (error) {
     console.error ('Error in analyzeAdText:', error);
-    // Return a default structure on error to prevent cascading failures
     return {
       extractedMake: 'Error processing text',
       extractedModel: 'Error processing text',
@@ -472,7 +457,6 @@ Return your response in the specified JSON format. If a field cannot be determin
   }
 }
 
-// Wrapper to include original description for context in price comparison
 async function analyzeAdTextAndReturnWithOriginal (adTitle, adDescription) {
   const analysis = await analyzeAdText (adTitle, adDescription);
   return {...analysis, originalDescriptionForContext: adDescription};
@@ -486,7 +470,6 @@ async function getAdPriceComparisonInsight (
   visualCondition,
   sellerTextSummary
 ) {
-  // Ensure sellerTextSummary and its properties are safely accessed
   const safeSellerTextSummary = sellerTextSummary || {};
   const mentionedFeatures = Array.isArray (
     safeSellerTextSummary.mentionedFeatures
@@ -501,7 +484,7 @@ async function getAdPriceComparisonInsight (
   const sellerCondition =
     safeSellerTextSummary.sellerConditionSummary || 'Not specified by seller.';
   const originalDescription =
-    safeSellerTextSummary.originalDescriptionForContext || ''; // Get original description
+    safeSellerTextSummary.originalDescriptionForContext || '';
 
   const prompt = `You are an AI assistant helping a user evaluate a vintage audio equipment ad.
 Item: ${make} ${model}
@@ -543,98 +526,12 @@ Return your response in the specified JSON format.`;
     return JSON.parse (result.response.text ());
   } catch (error) {
     console.error ('Error in getAdPriceComparisonInsight:', error);
-    // Return a default structure on error
     return {
       insight: 'Could not generate price comparison insight due to an error.',
       error: `Gemini AI price comparison insight failed: ${error.message}`,
     };
   }
 }
-
-// --- EXISTING AI FUNCTIONS (FOR ITEMS ALREADY IN DATABASE) ---
-const valueInsightModel = genAI.getGenerativeModel ({
-  model: MODEL_NAME_PRO,
-  safetySettings: DEFAULT_SAFETY_SETTINGS,
-  generationConfig: {
-    temperature: 0.7,
-    topP: 0.95,
-    topK: 60,
-    maxOutputTokens: 2048,
-    responseMimeType: 'application/json',
-    responseSchema: {
-      type: 'OBJECT',
-      properties: {
-        description: {
-          type: 'STRING',
-          description: 'Brief description and key features relevant to its value.',
-        },
-        productionDates: {
-          type: 'STRING',
-          description: "When the item was manufactured (e.g., '1970-1975').",
-        },
-        marketDesirability: {
-          type: 'STRING',
-          description: 'How sought after it is, considering rarity, sound quality, build, aesthetics, repairability.',
-        },
-        estimatedValueUSD: {
-          type: 'STRING',
-          description: "A market value range in USD (e.g., '$X - $Y'). Explicitly state 'Unable to determine' if no data.",
-        },
-        disclaimer: {
-          type: 'STRING',
-          description: 'Standard disclaimer about automated estimates.',
-        },
-      },
-      required: [
-        'description',
-        'productionDates',
-        'marketDesirability',
-        'estimatedValueUSD',
-        'disclaimer',
-      ],
-    },
-  },
-});
-
-const suggestionsModel = genAI.getGenerativeModel ({
-  model: MODEL_NAME_PRO,
-  safetySettings: DEFAULT_SAFETY_SETTINGS,
-  generationConfig: {
-    temperature: 0.8,
-    topP: 0.95,
-    topK: 60,
-    maxOutputTokens: 2048,
-    responseMimeType: 'application/json',
-    responseSchema: {
-      type: 'OBJECT',
-      properties: {
-        suggestions: {
-          type: 'ARRAY',
-          description: 'An array of 3-5 suggested items.',
-          items: {
-            type: 'OBJECT',
-            properties: {
-              make: {
-                type: 'STRING',
-                description: 'The manufacturer of the suggested item.',
-              },
-              model: {
-                type: 'STRING',
-                description: 'The model name/number of the suggested item.',
-              },
-              reason: {
-                type: 'STRING',
-                description: 'A brief explanation of why this item is a good suggestion.',
-              },
-            },
-            required: ['make', 'model', 'reason'],
-          },
-        },
-      },
-      required: ['suggestions'],
-    },
-  },
-});
 
 async function urlToBase64 (url) {
   try {
@@ -762,26 +659,35 @@ async function getRelatedGearSuggestions (
 }
 
 // --- GCS HELPER FUNCTIONS ---
-const uploadToGcs = (file, bucketName, storage) =>
-  new Promise ((resolve, reject) => {
-    const bucket = storage.bucket (bucketName);
-    const blob = bucket.file (
-      `audio-items/${Date.now ()}-${file.originalname.replace (/ /g, '_')}`
-    );
-    const stream = blob.createWriteStream ({
-      metadata: {contentType: file.mimetype},
-      resumable: false,
+// This function has been rewritten to align with the bucket's "Uniform Access" setting.
+const uploadToGcs = async (file, bucketName, storage) => {
+  if (!file || !file.buffer) {
+    console.error ('UploadToGcs Error: Invalid or empty file object provided.');
+    throw new Error ('Invalid or empty file object provided.');
+  }
+
+  const bucket = storage.bucket (bucketName);
+  const blob = bucket.file (
+    `audio-items/${Date.now ()}-${file.originalname.replace (/ /g, '_')}`
+  );
+
+  try {
+    // With Uniform bucket-level access, we only need to save the file.
+    // It will automatically be public. We must remove the .makePublic() call.
+    await blob.save (file.buffer, {
+      metadata: {
+        contentType: file.mimetype,
+      },
     });
-    stream.on ('error', err => {
-      console.error ('GCS Upload Stream Error:', err);
-      reject (err);
-    });
-    stream.on ('finish', () => {
-      const publicUrl = `https://storage.googleapis.com/${bucketName}/${blob.name}`;
-      resolve (publicUrl);
-    });
-    stream.end (file.buffer);
-  });
+
+    const publicUrl = `https://storage.googleapis.com/${bucketName}/${blob.name}`;
+    console.log (`SUCCESS: Uploaded file. It is now available at ${publicUrl}`);
+    return publicUrl;
+  } catch (err) {
+    console.error ('GCS UPLOAD FAILED:', err);
+    throw new Error (`GCS upload failed: ${err.message}`);
+  }
+};
 
 const deleteFromGcs = async (fileUrl, bucketName, storage) => {
   try {
@@ -797,10 +703,7 @@ const deleteFromGcs = async (fileUrl, bucketName, storage) => {
 };
 
 module.exports = {
-  // --- VAV-UPDATE ---
-  // Add the new uber function to the exports
   getAiFullAnalysisForCollectionItem,
-  //
   getComprehensiveWildFindAnalysis,
   getVisualAnalysis,
   getFactualFeatures,

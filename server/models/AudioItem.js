@@ -8,14 +8,14 @@ const audioItemSchema = new mongoose.Schema (
       ref: 'User',
       required: [true, 'Audio item must belong to a user.'],
     },
-    status: {
-      type: String,
-      required: true,
-      enum: {
-        values: ['Personal Collection', 'For Sale', 'For Trade'],
-        message: 'Status is not a valid option.',
-      },
-      default: 'Personal Collection',
+    // --- UPDATED: Replaced 'status' with specific boolean fields ---
+    isForSale: {
+      type: Boolean,
+      default: false,
+    },
+    isOpenToTrade: {
+      type: Boolean,
+      default: false,
     },
     privacy: {
       type: String,
@@ -49,6 +49,7 @@ const audioItemSchema = new mongoose.Schema (
           'Amplifier',
           'Pre-amplifier',
           'Tape Deck',
+          'Reel to Reel', 
           'CD Player',
           'Equalizer',
           'Tuner',
@@ -102,8 +103,6 @@ const audioItemSchema = new mongoose.Schema (
     userEstimatedValue: Number,
     userEstimatedValueDate: Date,
 
-    // --- VAV-UPDATE ---
-    // Added a dedicated object to track AI identification vs. user input.
     identification: {
       wasCorrected: {type: Boolean, default: false},
       userInput: {type: String, default: ''},
@@ -124,6 +123,7 @@ const audioItemSchema = new mongoose.Schema (
   }
 );
 
-const AudioItem = mongoose.model ('AudioItem', audioItemSchema);
+// --- This part prevents Mongoose from recompiling the model if it already exists ---
+const AudioItem = mongoose.models.AudioItem || mongoose.model('AudioItem', audioItemSchema);
 
 module.exports = AudioItem;
