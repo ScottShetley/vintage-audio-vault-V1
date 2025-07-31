@@ -17,8 +17,8 @@ const PORT = process.env.PORT || 5000;
 
 // --- NEW: CORS Configuration for Production ---
 const allowedOrigins = [
-  'http://localhost:5173', // Your Vite frontend development server
-  'https://vav-final-project.onrender.com', // Placeholder for your live frontend URL
+  'http://localhost:5173',
+  'https://vav-final-project.onrender.com', // <-- Incorrect Placeholder
 ];
 
 const corsOptions = {
