@@ -11,17 +11,15 @@ const AddItemPage = () => {
   const [model, setModel] = useState('');
   const [itemType, setItemType] = useState('Receiver');
   const [condition, setCondition] = useState('Mint');
-  
-  // --- UPDATED: Replaced listingStatus with specific boolean fields for checkboxes ---
   const [isForSale, setIsForSale] = useState(false);
   const [isOpenToTrade, setIsOpenToTrade] = useState(false);
-  
   const [privacy, setPrivacy] = useState('Public');
   const [askingPrice, setAskingPrice] = useState('');
   const [isFullyFunctional, setIsFullyFunctional] = useState(true);
   const [issuesDescription, setIssuesDescription] = useState('');
   const [notes, setNotes] = useState('');
-  const [photo, setPhoto] = useState(null);
+  // --- UPDATED: State to handle multiple photos ---
+  const [photos, setPhotos] = useState([]);
 
   // UI states
   const [loading, setLoading] = useState(false);
@@ -31,7 +29,6 @@ const AddItemPage = () => {
   const itemTypeOptions = ['Receiver', 'Turntable', 'Speakers', 'Amplifier', 'Pre-amplifier', 'Tape Deck', 'Reel to Reel', 'CD Player', 'Equalizer', 'Tuner', 'Integrated Amplifier', 'Other'];
   const conditionOptions = ['Mint', 'Near Mint', 'Excellent', 'Very Good', 'Good', 'Fair', 'For Parts/Not Working', 'Restored'];
 
-  // --- NEW: Effect to manage privacy based on sale/trade status ---
   useEffect(() => {
     if (isForSale || isOpenToTrade) {
       setPrivacy('Public');
@@ -51,8 +48,9 @@ const AddItemPage = () => {
     setIsFullyFunctional(true);
     setIssuesDescription('');
     setNotes('');
-    setPhoto(null);
-    const fileInput = document.getElementById('photo');
+    // --- UPDATED: Clear photos array ---
+    setPhotos([]);
+    const fileInput = document.getElementById('photos');
     if (fileInput) {
       fileInput.value = '';
     }
@@ -78,12 +76,10 @@ const AddItemPage = () => {
     formData.append('model', model);
     formData.append('itemType', itemType);
     formData.append('condition', condition);
-    
-    // --- UPDATED: Send the new boolean fields to the backend ---
     formData.append('isForSale', isForSale);
     formData.append('isOpenToTrade', isOpenToTrade);
-    
     formData.append('privacy', privacy);
+
     if (isForSale) {
       formData.append('askingPrice', askingPrice);
     }
@@ -94,12 +90,15 @@ const AddItemPage = () => {
     }
     if (notes) formData.append('notes', notes);
     
-    if (photo) {
-      formData.append('photo', photo);
+    // --- UPDATED: Loop through photos and append each one ---
+    if (photos.length > 0) {
+      for (let i = 0; i < photos.length; i++) {
+        formData.append('photos', photos[i]);
+      }
     }
 
     try {
-      const response = await axios.post('http://localhost:5000/api/items', formData, {
+      const response = await axios.post('/api/items', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
           Authorization: `Bearer ${token}`,
@@ -152,7 +151,6 @@ const AddItemPage = () => {
 
       <form onSubmit={handleSubmit} className="bg-vav-content-card shadow-xl rounded-lg p-6 md:p-8 space-y-6">
         
-        {/* --- NEW: Checkbox controls for listing status --- */}
         <div className="space-y-4 rounded-lg bg-vav-background p-4">
             <label className={labelClass}>Listing Options</label>
             <div className="flex items-center">
@@ -181,7 +179,6 @@ const AddItemPage = () => {
             </div>
         </div>
 
-        {/* Make and Model */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label htmlFor="make" className={labelClass}>Make <span className="text-red-500">*</span></label>
@@ -193,7 +190,6 @@ const AddItemPage = () => {
           </div>
         </div>
 
-        {/* Item Type and Condition */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label htmlFor="itemType" className={labelClass}>Item Type <span className="text-red-500">*</span></label>
@@ -210,7 +206,6 @@ const AddItemPage = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* --- UPDATED: Privacy is now conditional --- */}
             <div>
                 <label htmlFor="privacy" className={labelClass}>Visibility</label>
                 <select 
@@ -229,7 +224,6 @@ const AddItemPage = () => {
             </div>
         </div>
         
-        {/* --- UPDATED: Conditional Asking Price Input --- */}
         {isForSale && (
             <div>
                 <label htmlFor="askingPrice" className={labelClass}>Asking Price ($) <span className="text-red-500">*</span></label>
@@ -247,7 +241,6 @@ const AddItemPage = () => {
             </div>
         )}
 
-        {/* Functionality and Issues */}
         <div>
           <div className="flex items-center">
             <input
@@ -270,30 +263,30 @@ const AddItemPage = () => {
           </div>
         )}
         
-        {/* Notes */}
         <div>
           <label htmlFor="notes" className={labelClass}>Notes</label>
           <textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} className={inputClass} rows="4" />
         </div>
         
-        {/* Photo Upload */}
+        {/* --- UPDATED: Photo Upload Section for Multiple Files --- */}
         <div>
-          <label htmlFor="photo" className={labelClass}>Photo</label>
+          <label htmlFor="photos" className={labelClass}>Add Photo(s)</label>
           <input
             type="file"
-            id="photo"
+            id="photos"
+            multiple // <-- Allow multiple files
             accept="image/*"
-            onChange={(e) => setPhoto(e.target.files[0])}
+            onChange={(e) => setPhotos(Array.from(e.target.files))} // <-- Handle multiple files
             className={`block w-full text-sm text-vav-text-secondary file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-vav-accent-primary file:text-vav-background hover:file:bg-vav-accent-secondary hover:file:text-white ${inputClass} p-0 border-dashed`}
           />
-           {photo && (
+          <p className="text-xs text-vav-text-secondary mt-1">You can select up to 5 images. The first image will be used for AI analysis.</p>
+           {photos.length > 0 && (
             <div className="mt-2 text-xs text-vav-text-secondary">
-              Selected file: {photo.name}
+              Selected {photos.length} file(s): {photos.map(f => f.name).join(', ')}
             </div>
           )}
         </div>
 
-        {/* Messages and Submit Button */}
         <div className="pt-4">
           {error && (
             <p className="text-red-500 text-sm mb-4 text-center bg-red-900 bg-opacity-30 p-2 rounded">{error}</p>

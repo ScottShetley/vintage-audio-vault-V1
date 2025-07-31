@@ -27,6 +27,7 @@ const uploadMultiple = multer({
   limits: { fileSize: 5 * 1024 * 1024 },
 }).array('photos', 5);
 
+// This is no longer used by the primary 'add' or 'edit' routes
 const uploadSingle = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
@@ -42,6 +43,7 @@ const uploadWildFind = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
 }).single('image');
 
+// This middleware is now only used for single-file AI analysis routes
 const uploadToGcsMiddleware = async (req, res, next) => {
   if (!req.file) {
     return next();
@@ -179,14 +181,28 @@ router.get('/:id', protect, async (req, res) => {
   }
 });
 
-// POST /api/items
+// POST /api/items --- UPDATED FOR MULTIPLE IMAGE UPLOAD
 router.post(
   '/',
   protect,
-  uploadSingle,
-  uploadToGcsMiddleware,
+  uploadMultiple, // <-- Changed from uploadSingle to uploadMultiple
   async (req, res) => {
     try {
+      let uploadedImageUrls = [];
+      const primaryImageForAnalysis = req.files && req.files.length > 0 ? req.files[0] : null;
+
+      // Upload all images to GCS
+      if (req.files && req.files.length > 0) {
+        const gcs = req.app.locals.gcs;
+        if (!gcs || !gcs.bucketName) {
+          throw new Error('GCS configuration error on server.');
+        }
+        const uploadPromises = req.files.map(file =>
+          uploadToGcs(file, gcs.bucketName, gcs.storage)
+        );
+        uploadedImageUrls = await Promise.all(uploadPromises);
+      }
+
       const userInput = {
         make: req.body.make,
         model: req.body.model,
@@ -200,8 +216,8 @@ router.post(
       let finalMake = userInput.make;
       let finalModel = userInput.model;
 
-      if (req.file) {
-        const visualAnalysisArray = await getVisualAnalysis(req.file);
+      if (primaryImageForAnalysis) {
+        const visualAnalysisArray = await getVisualAnalysis(primaryImageForAnalysis);
         if (visualAnalysisArray && visualAnalysisArray.length > 0) {
           const aiIdentified = visualAnalysisArray[0];
           const aiIsConfident =
@@ -234,7 +250,7 @@ router.post(
         isFullyFunctional: String(
           req.body.isFullyFunctional
         ).toLowerCase() === 'true',
-        photoUrls: req.gcsUrl ? [req.gcsUrl] : [],
+        photoUrls: uploadedImageUrls, // <-- Use the array of uploaded URLs
         identification: identification,
       };
       
@@ -251,7 +267,7 @@ router.post(
         itemType: newItemData.itemType,
         condition: newItemData.condition,
         notes: newItemData.notes,
-        photoUrl: req.gcsUrl,
+        photoUrl: uploadedImageUrls[0] || null, // <-- Use the first image for full analysis
       });
 
       newItemData.aiAnalysis = aiAnalysis;
@@ -279,30 +295,16 @@ router.put(
   protect,
   uploadMultiple, 
   async (req, res) => {
-    // === START DIAGNOSTIC LOGGING ===
-    console.log(`\n--- DIAGNOSTICS FOR PUT /api/items/${req.params.id} ---`);
-    console.log('Timestamp:', new Date().toISOString());
-    console.log('1. Raw req.body (text fields):', req.body);
-    console.log('2. Raw req.files (multer processing):', req.files);
-    // === END DIAGNOSTIC LOGGING ===
-    
     try {
       const item = await AudioItem.findById(req.params.id);
       if (!item || item.user.toString() !== req.user.id) {
         return res.status(404).json({ message: 'Item not found or you do not have permission.' });
       }
 
-      // === START DIAGNOSTIC LOGGING ===
-      console.log('3. Item found in DB. Current photoUrls:', item.photoUrls);
-      // === END DIAGNOSTIC LOGGING ===
-
-      // --- IMAGE HANDLING LOGIC ---
       if (req.body.existingPhotoUrls) {
         item.photoUrls = JSON.parse(req.body.existingPhotoUrls);
-        console.log('4. photoUrls array AFTER processing deletions:', item.photoUrls);
       } else {
         item.photoUrls = [];
-        console.log('4. photoUrls array CLEARED as existingPhotoUrls was missing.');
       }
       
       if (req.files && req.files.length > 0) {
@@ -314,12 +316,9 @@ router.put(
             uploadToGcs(file, gcs.bucketName, gcs.storage)
           );
           const newImageUrls = await Promise.all(uploadPromises);
-          console.log('5. Generated GCS URLs for new images:', newImageUrls);
           item.photoUrls.push(...newImageUrls);
-          console.log('6. photoUrls array AFTER appending new images:', item.photoUrls);
       }
       
-      // --- TEXT & BOOLEAN FIELD HANDLING LOGIC ---
       const safeHasProperty = (prop) => Object.prototype.hasOwnProperty.call(req.body, prop);
       if (safeHasProperty('make')) item.make = req.body.make;
       if (safeHasProperty('model')) item.model = req.body.model;
@@ -345,17 +344,10 @@ router.put(
       }
 
       const updatedItem = await item.save();
-      
-      console.log('7. Final item state saved to DB:', updatedItem);
-      console.log('--- END DIAGNOSTICS --- \n');
-
       res.json(updatedItem);
 
     } catch (error) {
       console.error('Error updating item:', error);
-      console.log('--- ERROR IN PUT /api/items/:id ---');
-      console.log(error);
-      console.log('--- END ERROR DIAGNOSTICS --- \n');
       res
         .status(500)
         .json({
@@ -412,15 +404,15 @@ router.delete('/:id', protect, async (req, res) => {
     }
     const gcs = req.app.locals.gcs;
     if (item.photoUrls && item.photoUrls.length > 0 && gcs && gcs.bucketName) {
-      await Promise.all(
-        item.photoUrls.map(url =>
+      const deletionPromises = item.photoUrls.map(url =>
           deleteFromGcs(url, gcs.bucketName, gcs.storage)
-        )
       );
+      await Promise.all(deletionPromises);
     }
     await AudioItem.findByIdAndDelete(req.params.id);
     res.json({ message: 'Item removed successfully' });
   } catch (error) {
+    console.error('Error deleting item:', error);
     res.status(500).json({ message: 'Server error while deleting item.' });
   }
 });
@@ -510,7 +502,7 @@ router.post(
       const textAnalysis = await analyzeAdText(adTitle, adDescription);
       const visualAnalysisArray = await getVisualAnalysis(req.file);
 
-      if (!visualAnalysisArray || visualAnalysisArray.length > 0) {
+      if (!visualAnalysisArray || visualAnalysisArray.length === 0) {
         return res
           .status(404)
           .json({ message: 'AI could not identify the item from the image.' });
