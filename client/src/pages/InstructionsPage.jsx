@@ -1,34 +1,178 @@
 // client/src/pages/InstructionsPage.jsx
 import React from 'react';
 
+// A key/legend for the confidence colors
+const ConfidenceKey = () => (
+  <div className="mt-4 p-4 bg-vav-background rounded-md border border-vav-background-alt">
+    <h4 className="text-md font-semibold text-vav-text-secondary mb-2">
+      Confidence Level Key:
+    </h4>
+    <p className="text-sm text-vav-text-secondary mb-3">
+      This key appears on AI analysis reports to give you a quick visual guide to the AI's certainty in its estimated value.
+    </p>
+    <ul className="text-sm text-vav-text space-y-2">
+      <li className="flex items-center">
+        <span className="h-4 w-4 rounded-full bg-green-400 mr-3 border border-black/20" />
+        {' '}
+        High Confidence
+      </li>
+      <li className="flex items-center">
+        <span className="h-4 w-4 rounded-full bg-yellow-400 mr-3 border border-black/20" />
+        {' '}
+        Medium Confidence
+      </li>
+      <li className="flex items-center">
+        <span className="h-4 w-4 rounded-full bg-orange-400 mr-3 border border-black/20" />
+        {' '}
+        Low Confidence
+      </li>
+    </ul>
+  </div>
+);
+
 const InstructionsPage = () => {
   return (
-    <div className="w-full max-w-4xl p-8 bg-vav-content-card rounded-lg shadow-lg">
-      <h1 className="text-3xl font-bold text-vav-text mb-6 border-b border-gray-600 pb-2">
+    <div className="w-full max-w-4xl p-6 md:p-8 bg-vav-content-card rounded-lg shadow-lg text-vav-text-secondary">
+      <h1 className="text-3xl font-bold font-serif text-vav-text mb-6 border-b border-gray-600 pb-3">
         How to Use the Vintage Audio Vault
       </h1>
-      <div className="space-y-4 text-vav-text-secondary">
-        <p>
-          This application is designed to be your all-in-one companion for vintage audio collecting.
-        </p>
-        <h2 className="text-2xl font-semibold text-vav-accent-primary pt-4">
-          Dashboard
-        </h2>
-        <p>
-          The dashboard is your main collection view. Here you can see all the items you've cataloged, add new items, and manage your inventory.
-        </p>
-        <h2 className="text-2xl font-semibold text-vav-accent-primary pt-4">
-          Wild Find AI Analysis
-        </h2>
-        <p>
-          Found a piece of gear in the wild? Upload a picture to the "Wild Find" page, and our AI will attempt to identify the item, assess its visual condition, and provide an estimated value. You can then save these finds to your profile.
-        </p>
-        <h2 className="text-2xl font-semibold text-vav-accent-primary pt-4">
-          Ad Analyzer
-        </h2>
-        <p>
-          Considering a purchase from an online ad? Use the "Ad Analyzer" to get a second opinion. Provide the ad's title, description, price, and image, and the AI will give you a detailed breakdown of the listing, including a price comparison and condition analysis.
-        </p>
+
+      <div className="space-y-8">
+
+        <section>
+          <h2 className="text-2xl font-semibold text-vav-accent-primary mb-3">
+            Managing Your Collection
+          </h2>
+          <p>
+            The
+            {' '}
+            <strong>Dashboard</strong>
+            {' '}
+            is your main collection view. Here you can see all the items you've cataloged, add new items, and manage your inventory. When adding or editing an item, you can:
+          </p>
+          <ul className="list-disc list-inside mt-2 space-y-1 pl-4">
+            <li>
+              Set items as
+              {' '}
+              <strong>Public</strong>
+              {' '}
+              to share with the community or
+              {' '}
+              <strong>Private</strong>
+              {' '}
+              to keep them visible only to you.
+            </li>
+            [cite_start]
+            <li>
+              List items for sale by checking the
+              {' '}
+              <strong>"For Sale"</strong>
+              {' '}
+              box and adding an asking price. [cite: 25]
+            </li>
+            <li>
+              Indicate you are open to offers by checking the
+              {' '}
+              <strong>"Open to Trades"</strong>
+              {' '}
+              box.
+            </li>
+          </ul>
+        </section>
+
+        <section>
+          <h2 className="text-2xl font-semibold text-vav-accent-primary mb-3">
+            Community & Discovery
+          </h2>
+          <p className="mb-2">
+            This app is also a community hub for enthusiasts. You can connect with others and discover new gear.
+          </p>
+          <ul className="list-disc list-inside space-y-1 pl-4">
+            [cite_start]
+            <li>
+              The
+              {' '}
+              <strong>Discover Page</strong>
+              {' '}
+              is the public marketplace where you can see all public items from every user. [cite: 28, 127]
+            </li>
+            [cite_start]
+            <li>
+              The
+              {' '}
+              <strong>Feed Page</strong>
+              {' '}
+              is your personalized stream, showing new items only from users you follow. [cite: 27, 122]
+            </li>
+            [cite_start]
+            <li>
+              You can visit other users'
+              {' '}
+              <strong>Profiles</strong>
+              {' '}
+              to see their public collections and choose to follow or unfollow them. [cite: 26, 121]
+            </li>
+          </ul>
+        </section>
+
+        <section>
+          <h2 className="text-2xl font-semibold text-vav-accent-primary mb-3">
+            Understanding the AI Tools
+          </h2>
+          <p className="mb-2">
+            The AI is your personal audio expert, helping you identify and value equipment.
+          </p>
+          <ul className="list-disc list-inside space-y-1 pl-4">
+            <li>
+              <strong>Wild Find:</strong>
+              {' '}
+              Found gear in the wild? [cite_start]Upload a picture, and the AI will attempt to identify it, assess its condition, and provide an estimated value. [cite: 6] You can save these finds to your profile.
+            </li>
+            <li>
+              <strong>Ad Analyzer:</strong>
+              {' '}
+              Considering a purchase? [cite_start]Provide the ad's details, and the AI will give you a breakdown of the listing, including a price comparison and condition analysis. [cite: 6]
+            </li>
+          </ul>
+        </section>
+
+        <section>
+          <h2 className="text-xl font-semibold text-vav-text mb-3">
+            Understanding the AI Valuation & Confidence Score
+          </h2>
+          <p>
+            The AI determines an estimated value by acting as a virtual audio expert. It combines the information you provide (make, model, images, etc.) with its vast knowledge of vintage audio equipment, including its history, reputation, and current market desirability.
+          </p>
+          <p className="mt-2">
+            A **Confidence Score** is provided with each valuation. This score reflects the AI's certainty about its own estimate based on the amount of information it could find. It is
+            {' '}
+            <strong>not</strong>
+            {' '}
+            a direct warning about the seller's asking price. Low confidence usually means the item is rare, obscure, or the provided information was too generic.
+          </p>
+          <ConfidenceKey />
+        </section>
+
+        <section>
+          <h2 className="text-2xl font-semibold text-vav-accent-primary mb-3">
+            Tips for Best AI Results
+          </h2>
+          <ul className="list-disc list-inside space-y-1 pl-4">
+            [cite_start]
+            <li>
+              <strong>Use Clear Photos:</strong>
+              {' '}
+              For the most accurate identifications, use clear, well-lit photos of the item's front panel where the make and model numbers are visible. [cite: 222]
+            </li>
+            [cite_start]
+            <li>
+              <strong>AI Identification Correction:</strong>
+              {' '}
+              When adding an item, if the AI is highly confident that your photo shows a different item than what you typed, it will flag the discrepancy and may auto-correct the make and model for a more accurate analysis. [cite: 24, 119]
+            </li>
+          </ul>
+        </section>
+
       </div>
     </div>
   );
