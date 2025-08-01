@@ -25,7 +25,6 @@ function FormattedAiDescription({ description }) {
     );
 }
 
-// --- NEW: Helper component to display value with confidence styling ---
 const AdConfidenceDisplay = ({ value, confidence }) => {
   let config = {
     icon: <IoWarningOutline className="w-6 h-6 mr-2" />,
@@ -62,6 +61,17 @@ const AdConfidenceDisplay = ({ value, confidence }) => {
   );
 };
 
+// --- NEW: A key/legend for the confidence colors ---
+const ConfidenceKey = () => (
+    <div>
+        <h4 className="text-sm font-semibold text-vav-text-secondary mb-2">Confidence Level Key:</h4>
+        <ul className="text-xs text-vav-text space-y-1">
+            <li className="flex items-center"><span className="h-3 w-3 rounded-full bg-green-400 mr-2"></span> High Confidence</li>
+            <li className="flex items-center"><span className="h-3 w-3 rounded-full bg-yellow-400 mr-2"></span> Medium Confidence</li>
+            <li className="flex items-center"><span className="h-3 w-3 rounded-full bg-orange-400 mr-2"></span> Low Confidence</li>
+        </ul>
+    </div>
+);
 
 function AdAnalyzerPage() {
   const navigate = useNavigate();
@@ -109,7 +119,7 @@ function AdAnalyzerPage() {
     
     try {
       const response = await axios.post('/api/items/analyze-ad-listing', formData, {
-        headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'multipart-form-data', Authorization: `Bearer ${token}` },
       });
       setAnalysisResult(response.data);
     } catch (err) {
@@ -183,8 +193,6 @@ function AdAnalyzerPage() {
                     <h3 className="text-xl font-semibold text-vav-accent-secondary mb-3">Price Insight</h3>
                     <div className="space-y-2">
                         <p className="text-vav-text"><strong>Seller's Asking Price:</strong> <span className="font-bold text-2xl">${parseFloat(analysisResult.askingPrice).toFixed(2)}</span></p>
-                        
-                        {/* --- UPDATED: Use the new AdConfidenceDisplay component --- */}
                         <div className="text-vav-text flex items-center space-x-2">
                             <strong>AI Estimated Value:</strong>
                             <AdConfidenceDisplay
@@ -195,6 +203,10 @@ function AdAnalyzerPage() {
                     </div>
                     <div className="mt-3">
                         <FormattedAiDescription description={analysisResult.priceComparison?.insight} />
+                    </div>
+                    {/* --- NEW: Confidence key added here --- */}
+                    <div className="mt-4 border-t border-vav-accent-primary/20 pt-3">
+                        <ConfidenceKey />
                     </div>
                 </div>
                 <div className="p-4 bg-vav-background-alt rounded-md shadow">
