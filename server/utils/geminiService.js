@@ -569,9 +569,43 @@ async function urlToBase64 (url) {
 }
 
 async function getAiValueInsight (make, model, condition, imageUrls = []) {
+  // --- START: FIX FOR JSON PARSING ERROR ---
   const itemInfo = `Item: ${make} ${model}, Condition: ${condition}.`;
-  const personaAndTask = `You are a vintage audio equipment expert providing a market valuation. Based on the provided item information and any images, analyze its key features, production era, and market desirability. Provide a concise description, production dates, market desirability assessment, and an estimated market value range in USD. If a value cannot be determined, state that clearly.`;
+  const personaAndTask = `You are a vintage audio equipment expert providing a market valuation.
+  
+  Your task is to respond with a JSON object containing a detailed valuation.
+  CRITICAL INSTRUCTION: You MUST provide a value range. If information is scarce, provide a wide, conservative value range and a 'Low' confidence score. Never refuse to provide a value.
+  
+  The JSON object must contain the following fields:
+  - "description": A concise description of the item.
+  - "productionDates": The production years (e.g., "1978-1981").
+  - "marketDesirability": A brief assessment of how sought-after this item is.
+  - "estimatedValueUSD": Your estimated market value range in USD (e.g., "$500 - $750").
+  - "valuationConfidence": Your confidence in the estimate ('High', 'Medium', or 'Low').
+  - "disclaimer": A standard disclaimer.`;
+
+  const schema = {
+    type: 'OBJECT',
+    properties: {
+      description: {type: 'STRING'},
+      productionDates: {type: 'STRING'},
+      marketDesirability: {type: 'STRING'},
+      estimatedValueUSD: {type: 'STRING'},
+      valuationConfidence: {type: 'STRING'},
+      disclaimer: {type: 'STRING'},
+    },
+    required: [
+      'description',
+      'productionDates',
+      'marketDesirability',
+      'estimatedValueUSD',
+      'valuationConfidence',
+      'disclaimer',
+    ],
+  };
+
   const parts = [{text: `${personaAndTask}\n${itemInfo}`}];
+
   if (imageUrls && imageUrls.length > 0) {
     const imagePartsPromises = imageUrls.slice (0, 5).map (async url => {
       const imageBase64 = await urlToBase64 (url);
@@ -599,11 +633,13 @@ async function getAiValueInsight (make, model, condition, imageUrls = []) {
   try {
     const result = await proModel.generateContent ({
       contents: [{role: 'user', parts: parts}],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: schema,
+      },
     });
-    const parsedResponse = JSON.parse (result.response.text ());
-    parsedResponse.disclaimer =
-      'This is an automated estimate for informational purposes only and not a formal appraisal. Market values fluctuate.';
-    return parsedResponse;
+    const responseText = result.response.text ();
+    return JSON.parse (responseText);
   } catch (e) {
     console.error (
       'Failed to parse JSON response from Gemini for value insight or API error:',
@@ -616,9 +652,11 @@ async function getAiValueInsight (make, model, condition, imageUrls = []) {
       productionDates: 'N/A',
       marketDesirability: 'N/A',
       estimatedValueUSD: 'Unable to determine market value range.',
-      disclaimer: 'This is an automated estimate for informational purposes only and not a formal appraisal. Market values fluctuate.',
+      valuationConfidence: 'Error',
+      disclaimer: 'An error occurred during AI analysis.',
     };
   }
+  // --- END: FIX FOR JSON PARSING ERROR ---
 }
 
 async function getRelatedGearSuggestions (
