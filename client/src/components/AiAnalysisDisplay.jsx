@@ -1,8 +1,8 @@
 // client/src/components/AiAnalysisDisplay.jsx
 import React, { useState } from 'react';
-import { IoChevronDown, IoWarningOutline } from 'react-icons/io5';
+import { IoChevronDown, IoWarningOutline, IoShieldCheckmarkOutline } from 'react-icons/io5';
 
-// A helper component for each collapsible section to reduce repetition
+// Helper component for each collapsible section
 const AccordionSection = ({ title, children, isOpen, setIsOpen }) => (
   <div className="border-b border-vav-background-alt">
     <button
@@ -28,14 +28,57 @@ const AccordionSection = ({ title, children, isOpen, setIsOpen }) => (
   </div>
 );
 
-// A helper to render bullet points from a string
+// Helper to render bullet points from a string
 const BulletPointList = ({ text }) => (
     <ul className="list-disc list-inside space-y-2">
-        {text.split('\n').map((item, index) => item.trim() && (
+        {text && typeof text === 'string' && text.split('\n').map((item, index) => item.trim() && (
             <li key={index}>{item.trim().replace(/^- /, '')}</li>
         ))}
     </ul>
 );
+
+// --- NEW: Helper component to display value with confidence styling ---
+const ConfidenceValueDisplay = ({ value, confidence }) => {
+  let config = {
+    icon: <IoWarningOutline className="w-5 h-5 mr-2" />,
+    textColor: 'text-orange-400',
+    text: 'Low Confidence Estimate',
+  };
+
+  switch (confidence?.toLowerCase()) {
+    case 'high':
+      config = {
+        icon: <IoShieldCheckmarkOutline className="w-5 h-5 mr-2" />,
+        textColor: 'text-green-400',
+        text: 'High Confidence Estimate',
+      };
+      break;
+    case 'medium':
+      config = {
+        icon: <IoWarningOutline className="w-5 h-5 mr-2" />,
+        textColor: 'text-yellow-400',
+        text: 'Medium Confidence Estimate',
+      };
+      break;
+    case 'low':
+      // Default config is already set for 'low'
+      break;
+    default:
+        // Handles 'Error' or undefined confidence
+        config.text = "Confidence Not Available"
+  }
+
+  return (
+    <div className="text-center">
+        <p className={`text-2xl font-bold ${config.textColor}`}>{value}</p>
+        <div className={`flex items-center justify-center text-sm mt-1 ${config.textColor}`}>
+            {config.icon}
+            <span>{config.text}</span>
+        </div>
+    </div>
+  );
+};
+
 
 const AiAnalysisDisplay = ({ analysis }) => {
   const [isAnalysisOpen, setAnalysisOpen] = useState(true); // Default open
@@ -43,29 +86,9 @@ const AiAnalysisDisplay = ({ analysis }) => {
   const [isIssuesOpen, setIssuesOpen] = useState(false);
   const [isGearOpen, setGearOpen] = useState(false);
 
-  if (!analysis) {
-    return null;
-  }
-
-  // --- NEW: Check for an incomplete or failed analysis from the AI ---
-  const isAnalysisIncomplete = 
-    analysis.summary?.includes('could not be completed') ||
-    analysis.valueInsight?.estimatedValueUSD === 'Error';
-
-  // --- NEW: Render a user-friendly message if the analysis is incomplete ---
-  if (isAnalysisIncomplete) {
-    return (
-        <div className="bg-vav-background rounded-lg shadow-inner overflow-hidden p-6 text-center">
-            <IoWarningOutline className="mx-auto h-12 w-12 text-yellow-500 mb-4" />
-            <h3 className="text-xl font-semibold text-vav-text mb-2">AI Analysis Incomplete</h3>
-            <p className="text-vav-text-secondary">
-                The AI could not confidently identify this item from the provided photo.
-            </p>
-            <p className="text-vav-text-secondary mt-2">
-                For best results, please try again with a clear, well-lit photo of the item's front panel, or edit the item to enter the make and model manually.
-            </p>
-        </div>
-    );
+  if (!analysis || analysis.error) {
+     // Simplified check for no analysis or a backend error
+    return null; 
   }
 
   return (
@@ -74,10 +97,13 @@ const AiAnalysisDisplay = ({ analysis }) => {
       <div className="p-5 bg-vav-background-alt/50">
         <p className="text-sm text-vav-text-secondary text-center mb-1">AI Summary</p>
         <p className="text-center text-vav-text italic mb-3">"{analysis.summary}"</p>
+        
+        {/* --- UPDATED: Use the new ConfidenceValueDisplay component --- */}
         {analysis.valueInsight?.estimatedValueUSD && (
-             <p className="text-center text-2xl font-bold text-vav-accent-primary">
-                {analysis.valueInsight.estimatedValueUSD}
-            </p>
+            <ConfidenceValueDisplay 
+                value={analysis.valueInsight.estimatedValueUSD}
+                confidence={analysis.valueInsight.valuationConfidence}
+            />
         )}
       </div>
 
