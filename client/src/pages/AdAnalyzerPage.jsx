@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import { IoWarningOutline, IoShieldCheckmarkOutline } from 'react-icons/io5';
 
 function FormattedAiDescription({ description }) {
     if (!description) return null;
@@ -23,6 +24,44 @@ function FormattedAiDescription({ description }) {
         </div>
     );
 }
+
+// --- NEW: Helper component to display value with confidence styling ---
+const AdConfidenceDisplay = ({ value, confidence }) => {
+  let config = {
+    icon: <IoWarningOutline className="w-6 h-6 mr-2" />,
+    textColor: 'text-orange-400',
+    text: 'Low Confidence',
+  };
+
+  switch (confidence?.toLowerCase()) {
+    case 'high':
+      config = {
+        icon: <IoShieldCheckmarkOutline className="w-6 h-6 mr-2" />,
+        textColor: 'text-green-400',
+        text: 'High Confidence',
+      };
+      break;
+    case 'medium':
+      config = {
+        icon: <IoWarningOutline className="w-6 h-6 mr-2" />,
+        textColor: 'text-yellow-400',
+        text: 'Medium Confidence',
+      };
+      break;
+    case 'low':
+      break; // Already set
+    default:
+        return <p className="font-bold text-2xl text-vav-text-secondary">{value || 'Not available'}</p>
+  }
+
+  return (
+    <div className={`flex items-center ${config.textColor}`}>
+        {config.icon}
+        <p className="font-bold text-2xl">{value}</p>
+    </div>
+  );
+};
+
 
 function AdAnalyzerPage() {
   const navigate = useNavigate();
@@ -69,7 +108,7 @@ function AdAnalyzerPage() {
     formData.append('askingPrice', askingPrice);
     
     try {
-      const response = await axios.post('http://localhost:5000/api/items/analyze-ad-listing', formData, {
+      const response = await axios.post('/api/items/analyze-ad-listing', formData, {
         headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` },
       });
       setAnalysisResult(response.data);
@@ -133,8 +172,47 @@ function AdAnalyzerPage() {
                     {saveStatus.success && <p className="text-green-400 text-sm mt-2">{saveStatus.success}</p>}
                 </div>
             </div>
-            {/* Analysis Results Display remains the same */}
-            <div className="space-y-6"><div className="p-4 bg-vav-background-alt rounded-md shadow"><h3 className="text-xl font-semibold text-vav-accent-secondary mb-3">AI Item Identification</h3><p className="text-vav-text"><strong>Make:</strong> {analysisResult.identifiedMake || 'Not identified'}</p><p className="text-vav-text"><strong>Model:</strong> {analysisResult.identifiedModel || 'Not identified'}</p></div><div className="p-4 bg-vav-background-alt rounded-md shadow"><h3 className="text-xl font-semibold text-vav-accent-secondary mb-3">Price Insight</h3><p className="text-vav-text"><strong>Seller's Asking Price:</strong> <span className="font-bold text-2xl">${parseFloat(analysisResult.askingPrice).toFixed(2)}</span></p><p className="text-vav-text"><strong>AI Estimated Value:</strong> <span className="font-bold text-2xl">{analysisResult.valueInsight?.estimatedValueUSD || 'Could not determine'}</span></p><div className="mt-3"><FormattedAiDescription description={analysisResult.priceComparison?.insight} /></div></div><div className="p-4 bg-vav-background-alt rounded-md shadow"><h3 className="text-xl font-semibold text-vav-accent-secondary mb-3">AI Visual Condition Assessment (from Image)</h3><FormattedAiDescription description={analysisResult.visualAnalysis?.conditionDescription} /></div><div className="p-4 bg-vav-background-alt rounded-md shadow"><h3 className="text-xl font-semibold text-vav-accent-secondary mb-3">Summary of Seller's Ad Text</h3><FormattedAiDescription description={analysisResult.textAnalysis?.sellerConditionSummary} />{analysisResult.textAnalysis?.mentionedFeatures?.length > 0 && ( <> <h4 className="text-lg font-semibold text-vav-text-secondary mt-4 mb-2">Mentioned Features:</h4> <ul className="list-disc list-inside text-vav-text space-y-1"> {analysisResult.textAnalysis.mentionedFeatures.map((feature, i) => <li key={i}>{feature}</li>)} </ul> </> )}{analysisResult.textAnalysis?.mentionedProblems?.length > 0 && ( <> <h4 className="text-lg font-semibold text-red-400 mt-4 mb-2">Mentioned Problems/Issues:</h4> <ul className="list-disc list-inside text-red-300 space-y-1"> {analysisResult.textAnalysis.mentionedProblems.map((problem, i) => <li key={i}>{problem}</li>)} </ul> </> )}</div><div className="p-4 bg-vav-background-alt rounded-md shadow"><h3 className="text-xl font-semibold text-vav-accent-secondary mb-3">AI Valuation Details</h3><FormattedAiDescription description={analysisResult.valueInsight?.marketDesirability} />{analysisResult.valueInsight?.disclaimer && <p className="text-xs text-vav-text-secondary/80 italic mt-4">{analysisResult.valueInsight.disclaimer}</p>}</div></div>
+            
+            <div className="space-y-6">
+                <div className="p-4 bg-vav-background-alt rounded-md shadow">
+                    <h3 className="text-xl font-semibold text-vav-accent-secondary mb-3">AI Item Identification</h3>
+                    <p className="text-vav-text"><strong>Make:</strong> {analysisResult.identifiedMake || 'Not identified'}</p>
+                    <p className="text-vav-text"><strong>Model:</strong> {analysisResult.identifiedModel || 'Not identified'}</p>
+                </div>
+                <div className="p-4 bg-vav-background-alt rounded-md shadow">
+                    <h3 className="text-xl font-semibold text-vav-accent-secondary mb-3">Price Insight</h3>
+                    <div className="space-y-2">
+                        <p className="text-vav-text"><strong>Seller's Asking Price:</strong> <span className="font-bold text-2xl">${parseFloat(analysisResult.askingPrice).toFixed(2)}</span></p>
+                        
+                        {/* --- UPDATED: Use the new AdConfidenceDisplay component --- */}
+                        <div className="text-vav-text flex items-center space-x-2">
+                            <strong>AI Estimated Value:</strong>
+                            <AdConfidenceDisplay
+                                value={analysisResult.valueInsight?.estimatedValueUSD}
+                                confidence={analysisResult.valueInsight?.valuationConfidence}
+                            />
+                        </div>
+                    </div>
+                    <div className="mt-3">
+                        <FormattedAiDescription description={analysisResult.priceComparison?.insight} />
+                    </div>
+                </div>
+                <div className="p-4 bg-vav-background-alt rounded-md shadow">
+                    <h3 className="text-xl font-semibold text-vav-accent-secondary mb-3">AI Visual Condition Assessment (from Image)</h3>
+                    <FormattedAiDescription description={analysisResult.visualAnalysis?.conditionDescription} />
+                </div>
+                <div className="p-4 bg-vav-background-alt rounded-md shadow">
+                    <h3 className="text-xl font-semibold text-vav-accent-secondary mb-3">Summary of Seller's Ad Text</h3>
+                    <FormattedAiDescription description={analysisResult.textAnalysis?.sellerConditionSummary} />
+                    {analysisResult.textAnalysis?.mentionedFeatures?.length > 0 && ( <> <h4 className="text-lg font-semibold text-vav-text-secondary mt-4 mb-2">Mentioned Features:</h4> <ul className="list-disc list-inside text-vav-text space-y-1"> {analysisResult.textAnalysis.mentionedFeatures.map((feature, i) => <li key={i}>{feature}</li>)} </ul> </> )}
+                    {analysisResult.textAnalysis?.mentionedProblems?.length > 0 && ( <> <h4 className="text-lg font-semibold text-red-400 mt-4 mb-2">Mentioned Problems/Issues:</h4> <ul className="list-disc list-inside text-red-300 space-y-1"> {analysisResult.textAnalysis.mentionedProblems.map((problem, i) => <li key={i}>{problem}</li>)} </ul> </> )}
+                </div>
+                <div className="p-4 bg-vav-background-alt rounded-md shadow">
+                    <h3 className="text-xl font-semibold text-vav-accent-secondary mb-3">AI Valuation Details</h3>
+                    <FormattedAiDescription description={analysisResult.valueInsight?.marketDesirability} />
+                    {analysisResult.valueInsight?.disclaimer && <p className="text-xs text-vav-text-secondary/80 italic mt-4">{analysisResult.valueInsight.disclaimer}</p>}
+                </div>
+            </div>
         </div>
       )}
     </div>
