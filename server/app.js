@@ -110,6 +110,19 @@ app.get ('/', (req, res) => {
   res.send ('Vintage Audio Vault Backend is running!');
 });
 
+/**
+ * @route   GET /api/health-check
+ * @desc    A lightweight endpoint for keep-alive services like UptimeRobot.
+ * @access  Public
+ */
+app.get ('/api/health-check', (req, res) => {
+  // Simply respond with a success status and a message.
+  // This requires no database calls or heavy processing.
+  res
+    .status (200)
+    .json ({status: 'UP', message: 'Server is awake and running.'});
+});
+
 // Start the server
 app.listen (PORT, () => {
   console.log (`Server running on port ${PORT}`);
