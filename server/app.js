@@ -68,20 +68,57 @@ if (MONGODB_URI) {
   );
 }
 
-// Google Cloud Storage Initialization
-const serviceAccountKeyPath = process.env.GCP_KEY_PATH;
+// --- UPDATED: Google Cloud Storage Initialization for Production & Development ---
 const gcsBucketName = process.env.GCS_BUCKET_NAME;
-if (serviceAccountKeyPath && gcsBucketName) {
+const gcpProjectId = process.env.GCP_PROJECT_ID;
+const gcpClientEmail = process.env.GCP_CLIENT_EMAIL;
+const gcpPrivateKey = process.env.GCP_PRIVATE_KEY;
+const serviceAccountKeyPath = process.env.GCP_KEY_PATH; // For local dev
+
+let storage;
+
+if (gcpClientEmail && gcpPrivateKey && gcpProjectId) {
+  // --- Production Logic (uses direct credential values) ---
+  console.log (
+    'Initializing GCS with environment variables (Production Mode).'
+  );
   try {
-    const storage = new Storage ({keyFilename: serviceAccountKeyPath});
-    app.locals.gcs = {storage: storage, bucketName: gcsBucketName};
-    console.log ('Google Cloud Storage initialized successfully.');
+    const credentials = {
+      client_email: gcpClientEmail,
+      private_key: gcpPrivateKey.replace (/\\n/g, '\n'), // Formats the private key correctly
+    };
+    storage = new Storage ({
+      projectId: gcpProjectId,
+      credentials,
+    });
   } catch (error) {
-    console.error ('Failed to initialize Google Cloud Storage:', error);
+    console.error (
+      'Failed to initialize Google Cloud Storage with environment variables:',
+      error
+    );
   }
-} else {
-  console.warn ('GCS initialization skipped due to missing .env variables.');
+} else if (serviceAccountKeyPath) {
+  // --- Development Logic (uses a local key file) ---
+  console.log ('Initializing GCS with key file (Development Mode).');
+  try {
+    storage = new Storage ({keyFilename: serviceAccountKeyPath});
+  } catch (error) {
+    console.error (
+      'Failed to initialize Google Cloud Storage with key file:',
+      error
+    );
+  }
 }
+
+if (storage && gcsBucketName) {
+  app.locals.gcs = {storage: storage, bucketName: gcsBucketName};
+  console.log ('Google Cloud Storage context set successfully.');
+} else {
+  console.warn (
+    'GCS initialization skipped: Required configuration is missing.'
+  );
+}
+// --- END OF GCS UPDATE ---
 
 // Google Gemini AI Initialization
 const geminiApiKey = process.env.GEMINI_API_KEY;
