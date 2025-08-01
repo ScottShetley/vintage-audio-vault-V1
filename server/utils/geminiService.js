@@ -67,6 +67,7 @@ async function getAiFullAnalysisForCollectionItem (itemData) {
         - "productionDates": A string representing the manufacturing years (e.g., "1976-1980").
         - "marketDesirability": A paragraph explaining how sought-after the item is, considering rarity, performance, and aesthetics.
         - "estimatedValueUSD": A string representing the estimated market value range in USD (e.g., "$400 - $600").
+        - "valuationConfidence": Your confidence in the valuation ('High', 'Medium', or 'Low'). If information is limited, provide a wider value range and a 'Low' confidence. You must always provide a value.
     4. "potentialIssues": A bulleted list of 3-5 common age-related issues or failure points for this specific model. Format this as a single string with each point starting with a hyphen and separated by a newline character (\\n).
     5. "restorationTips": A bulleted list of 3-5 common restoration or enhancement tips for this model. Format this as a single string with each point starting with a hyphen and separated by a newline character (\\n).
     6. "suggestedGear": An array of 3-5 suggested complementary vintage components (e.g., speakers, turntable). Each object in the array should have "make", "model", and a "reason" for the suggestion. Do not suggest another item of the same itemType as the input.
@@ -85,11 +86,13 @@ async function getAiFullAnalysisForCollectionItem (itemData) {
           productionDates: {type: 'STRING'},
           marketDesirability: {type: 'STRING'},
           estimatedValueUSD: {type: 'STRING'},
+          valuationConfidence: {type: 'STRING'},
         },
         required: [
           'productionDates',
           'marketDesirability',
           'estimatedValueUSD',
+          'valuationConfidence',
         ],
       },
       potentialIssues: {type: 'STRING'},
@@ -146,6 +149,7 @@ async function getAiFullAnalysisForCollectionItem (itemData) {
         productionDates: 'N/A',
         marketDesirability: 'N/A',
         estimatedValueUSD: 'Error',
+        valuationConfidence: 'Error',
       },
       potentialIssues: 'N/A',
       restorationTips: 'N/A',
@@ -173,10 +177,11 @@ async function getComprehensiveWildFindAnalysis (
     1.  "identifiedItem": A string combining the make and model (e.g., "Marantz 2270").
     2.  "visualCondition": A string containing the original visual condition description provided above.
     3.  "estimatedValue": A string representing the estimated market value range in USD (e.g., "$400 - $600").
-    4.  "detailedAnalysis": A detailed paragraph describing the item, its history, its reputation (e.g., sound quality, build quality), and its place in the vintage audio market.
-    5.  "potentialIssues": A bulleted list of common problems or age-related issues to check for with this specific model (e.g., "Failing capacitors in the power supply section", "Scratchy potentiometers", "Burnt out dial lamps"). Format this as a single string with each point starting with a hyphen and separated by a newline character (\\n).
-    6.  "restorationTips": A bulleted list of common restoration or enhancement tips for this model (e.g., "Consider a full recap with modern audio-grade capacitors", "Upgrade speaker binding posts for better connectivity", "Clean all switches and potentiometers with DeoxIT"). Format this as a single string with each point starting with a hyphen and separated by a newline character (\\n).
-    7.  "disclaimer": A standard disclaimer stating that this is an AI-generated estimate and professional evaluation is recommended.
+    4.  "valuationConfidence": Your confidence in the valuation ('High', 'Medium', or 'Low'). If information is limited (e.g., for a generic model), provide a wider value range and a 'Low' confidence. You must always provide a value and never refuse to guess.
+    5.  "detailedAnalysis": A detailed paragraph describing the item, its history, its reputation (e.g., sound quality, build quality), and its place in the vintage audio market.
+    6.  "potentialIssues": A bulleted list of common problems or age-related issues to check for with this specific model. Format this as a single string with each point starting with a hyphen and separated by a newline character (\\n).
+    7.  "restorationTips": A bulleted list of common restoration or enhancement tips for this model. Format this as a single string with each point starting with a hyphen and separated by a newline character (\\n).
+    8.  "disclaimer": A standard disclaimer stating that this is an AI-generated estimate and professional evaluation is recommended.
 
     Return ONLY the raw JSON object.
     `;
@@ -187,6 +192,7 @@ async function getComprehensiveWildFindAnalysis (
       identifiedItem: {type: 'STRING'},
       visualCondition: {type: 'STRING'},
       estimatedValue: {type: 'STRING'},
+      valuationConfidence: {type: 'STRING'},
       detailedAnalysis: {type: 'STRING'},
       potentialIssues: {type: 'STRING'},
       restorationTips: {type: 'STRING'},
@@ -196,6 +202,7 @@ async function getComprehensiveWildFindAnalysis (
       'identifiedItem',
       'visualCondition',
       'estimatedValue',
+      'valuationConfidence',
       'detailedAnalysis',
       'potentialIssues',
       'restorationTips',
@@ -221,6 +228,7 @@ async function getComprehensiveWildFindAnalysis (
       identifiedItem: `${make} ${model}`,
       visualCondition: conditionDescription,
       estimatedValue: 'Error',
+      valuationConfidence: 'Error',
       detailedAnalysis: 'Could not generate detailed analysis due to an error.',
       potentialIssues: 'Could not generate potential issues due to an error.',
       restorationTips: 'Could not generate restoration tips due to an error.',
@@ -354,16 +362,20 @@ Key Features: ${factualData.keyFeatures && factualData.keyFeatures.length > 0 ? 
 Observed Condition (from image analysis): ${visualData.conditionDescription}
 ${factualData.message ? 'Note from feature analysis: ' + factualData.message : ''}
 
-Your Task: Based on ALL the information above, provide an estimated market value range in USD.
-Crucially, provide a brief reasoning that explains how the item's features (or lack of specific features if model is generic) and its specific visual condition justify the estimated value.
-For example, mention if the value is higher due to rarity or lower due to cosmetic damage or if a specific valuation is difficult due to a generic model.
+Your Task: Based on ALL the information above, provide an estimated market value range in USD, your confidence in that estimate, and a brief reasoning.
+CRITICAL INSTRUCTION: You MUST provide a value range. If the model is generic or information is scarce, provide a very wide, conservative value range and a 'Low' confidence score. Never refuse to provide a value.
+Your reasoning should explain how the item's features (or lack thereof) and its visual condition justify the estimated value.
 Include a standard disclaimer. Return your response in the specified JSON format.`;
   const schema = {
     type: 'OBJECT',
     properties: {
       valueRange: {
         type: 'STRING',
-        description: 'The estimated market value range in USD (e.g., "$250 - $350", or "Difficult to determine for generic model").',
+        description: 'The estimated market value range in USD (e.g., "$250 - $350").',
+      },
+      valuationConfidence: {
+        type: 'STRING',
+        description: "The AI's confidence in the valuation ('High', 'Medium', or 'Low').",
       },
       reasoning: {
         type: 'STRING',
@@ -374,7 +386,7 @@ Include a standard disclaimer. Return your response in the specified JSON format
         description: 'A standard disclaimer about the estimate.',
       },
     },
-    required: ['valueRange', 'reasoning', 'disclaimer'],
+    required: ['valueRange', 'valuationConfidence', 'reasoning', 'disclaimer'],
   };
   try {
     const result = await proModel.generateContent ({
