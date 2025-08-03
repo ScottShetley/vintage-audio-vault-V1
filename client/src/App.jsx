@@ -15,12 +15,11 @@ import WildFindPage from './pages/WildFindPage';
 import AdAnalyzerPage from './pages/AdAnalyzerPage';
 import LandingPage from './pages/LandingPage';
 import InstructionsPage from './pages/InstructionsPage';
-import DiscoverPage from './pages/DiscoverPage'; // <-- UPDATED IMPORT
+import DiscoverPage from './pages/DiscoverPage';
 import SavedFindsPage from './pages/SavedFindsPage';
 import SavedFindDetailsPage from './pages/SavedFindDetailsPage';
 import ProfilePage from './pages/ProfilePage';
 import FeedPage from './pages/FeedPage';
-
 
 // Your main CSS file which now includes Tailwind directives
 import './index.css';
@@ -29,7 +28,8 @@ function App() {
   const [token, setToken] = useState(localStorage.getItem('authToken'));
   const [currentUser, setCurrentUser] = useState(null); 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false); // <-- NEW: State for mobile menu
+
   const navigate = useNavigate();
   const dropdownRef = useRef(null);
 
@@ -55,12 +55,24 @@ function App() {
     fetchUser();
   }, [token]);
 
+  // Close mobile menu when screen resizes to desktop
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 768) { // md breakpoint
+        setIsMobileMenuOpen(false);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
 
   const handleLogout = () => {
     setToken(null);
     setCurrentUser(null);
     localStorage.removeItem('authToken');
     setIsDropdownOpen(false);
+    setIsMobileMenuOpen(false); // <-- Close mobile menu on logout
     navigate('/');
   };
 
@@ -81,15 +93,16 @@ function App() {
 
   return (
     <div className="min-h-screen bg-vav-background text-vav-text font-sans flex flex-col items-center p-5 box-border">
-      <nav className="w-full max-w-full md:max-w-4xl lg:max-w-6xl mb-10 py-4 border-b border-vav-content-card flex justify-between items-center mx-auto">
+      <nav className="w-full max-w-full md:max-w-4xl lg:max-w-6xl mb-10 py-4 border-b border-vav-content-card flex justify-between items-center mx-auto relative">
         <Link to={token ? "/dashboard" : "/"} className="text-2xl font-bold text-vav-accent-primary no-underline">
           Vintage Audio Vault
         </Link>
-        <ul className="flex gap-6 items-center list-none p-0 m-0">
+        
+        {/* --- DESKTOP NAVIGATION --- */}
+        <ul className="hidden md:flex gap-6 items-center list-none p-0 m-0">
           {token ? (
             // Logged IN Links
             <>
-              {/* --- UPDATED LINK --- */}
               <li><Link to="/discover" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Discover</Link></li>
               <li><Link to="/feed" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Feed</Link></li>
               <li><Link to="/dashboard" className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Dashboard</Link></li>
@@ -120,7 +133,6 @@ function App() {
           ) : (
             // Logged OUT Links
             <>
-              {/* --- UPDATED LINK --- */}
               <li><Link to="/discover" className="text-lg font-bold text-vav-accent-primary hover:text-vav-text transition-colors">Discover</Link></li>
               <li><Link to="/instructions" className="text-lg font-bold text-vav-accent-primary hover:text-vav-text transition-colors">Instructions</Link></li>
               <li><Link to="/login" className="text-lg font-bold text-vav-accent-primary hover:text-vav-text transition-colors">Login</Link></li>
@@ -128,6 +140,50 @@ function App() {
             </>
           )}
         </ul>
+
+        {/* --- MOBILE HAMBURGER BUTTON --- */}
+        <div className="md:hidden">
+            <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="text-vav-text-secondary focus:outline-none">
+                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    {isMobileMenuOpen ? (
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /> // Close Icon
+                    ) : (
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /> // Hamburger Icon
+                    )}
+                </svg>
+            </button>
+        </div>
+
+        {/* --- MOBILE MENU PANEL --- */}
+        {isMobileMenuOpen && (
+            <div className="md:hidden absolute top-full left-0 w-full bg-vav-content-card shadow-lg rounded-b-md z-20">
+                <ul className="flex flex-col items-center gap-4 list-none p-5 m-0">
+                    {token ? (
+                        // Logged IN Mobile Links
+                        <>
+                            <li><Link to="/discover" onClick={() => setIsMobileMenuOpen(false)} className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Discover</Link></li>
+                            <li><Link to="/feed" onClick={() => setIsMobileMenuOpen(false)} className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Feed</Link></li>
+                            <li><Link to="/dashboard" onClick={() => setIsMobileMenuOpen(false)} className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Dashboard</Link></li>
+                            <li><Link to="/wild-find" onClick={() => setIsMobileMenuOpen(false)} className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Wild Find</Link></li>
+                            <li><Link to="/ad-analyzer" onClick={() => setIsMobileMenuOpen(false)} className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Ad Analyzer</Link></li>
+                            <li className="w-full border-t border-vav-background-alt my-2"></li>
+                            {currentUser && <li><Link to={`/profile/${currentUser._id}`} onClick={() => setIsMobileMenuOpen(false)} className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">My Profile</Link></li>}
+                            <li><Link to="/saved-finds" onClick={() => setIsMobileMenuOpen(false)} className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Saved Finds</Link></li>
+                            <li><Link to="/instructions" onClick={() => setIsMobileMenuOpen(false)} className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Instructions</Link></li>
+                            <li><button onClick={handleLogout} className="text-lg font-semibold text-vav-accent-primary hover:text-vav-text transition-colors">Logout</button></li>
+                        </>
+                    ) : (
+                        // Logged OUT Mobile Links
+                        <>
+                            <li><Link to="/discover" onClick={() => setIsMobileMenuOpen(false)} className="text-lg font-bold text-vav-accent-primary hover:text-vav-text transition-colors">Discover</Link></li>
+                            <li><Link to="/instructions" onClick={() => setIsMobileMenuOpen(false)} className="text-lg font-bold text-vav-accent-primary hover:text-vav-text transition-colors">Instructions</Link></li>
+                            <li><Link to="/login" onClick={() => setIsMobileMenuOpen(false)} className="text-lg font-bold text-vav-accent-primary hover:text-vav-text transition-colors">Login</Link></li>
+                            <li><Link to="/signup" onClick={() => setIsMobileMenuOpen(false)} className="text-lg font-bold text-vav-accent-primary hover:text-vav-text transition-colors">Sign Up</Link></li>
+                        </>
+                    )}
+                </ul>
+            </div>
+        )}
       </nav>
 
       <main className="w-full max-w-full md:max-w-4xl lg:max-w-6xl flex-grow flex flex-col items-center justify-center mx-auto">
@@ -137,7 +193,6 @@ function App() {
           <Route path="/instructions" element={<InstructionsPage />} />
           <Route path="/login" element={<LoginPage setToken={setToken} />} />
           <Route path="/signup" element={<SignupPage setToken={setToken} />} />
-          {/* --- UPDATED ROUTE --- */}
           <Route path="/discover" element={<DiscoverPage />} />
           <Route path="/profile/:userId" element={<ProfilePage />} />
           
