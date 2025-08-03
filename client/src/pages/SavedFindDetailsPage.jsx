@@ -61,14 +61,12 @@ const AdAnalysisDetails = ({ find }) => (
           <div className="mt-3"><FormattedAiDescription description={find.adAnalysis.priceComparison?.insight} /></div>
         </div>
         
-        {/* *** DEBUGGING SECTION *** */}
         <div className="p-4 bg-vav-content-card rounded-lg shadow-inner">
-          <h3 className="text-xl font-bold text-vav-accent-secondary border-b border-vav-accent-secondary pb-2 mb-3">Summary of Seller's Ad (Debug View)</h3>
-          <pre className="whitespace-pre-wrap bg-gray-900 text-white p-2 rounded-md text-xs font-mono">
-            {`Value: "${find.adAnalysis.textAnalysis?.sellerConditionSummary}"`}
-          </pre>
+          <h3 className="text-xl font-bold text-vav-accent-secondary border-b border-vav-accent-secondary pb-2 mb-3">Summary of Seller's Ad</h3>
+          <p className="text-vav-text italic">
+            "{find.adAnalysis.textAnalysis?.sellerConditionSummary}"
+          </p>
         </div>
-        {/* *** END DEBUGGING SECTION *** */}
 
       </div>
     </div>
@@ -78,7 +76,7 @@ const AdAnalysisDetails = ({ find }) => (
 
 const SavedFindDetailsPage = () => {
   const [find, setFind] = useState(null);
-  const [currentUser, setCurrentUser] = useState(null); // <-- NEW: State for current user
+  const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const { id } = useParams();
@@ -87,7 +85,6 @@ const SavedFindDetailsPage = () => {
   const [deleteError, setDeleteError] = useState(null);
 
   useEffect(() => {
-    // <-- UPDATED: Now fetches user and find data
     const fetchAllDetails = async () => {
       setLoading(true);
       setError(null);
@@ -102,8 +99,9 @@ const SavedFindDetailsPage = () => {
       const headers = { Authorization: `Bearer ${token}` };
 
       try {
+        // --- FIX: Changed path back to /api/wild-finds/ ---
         const [findResponse, userResponse] = await Promise.all([
-          axios.get(`http://localhost:5000/api/wild-finds/${id}`, { headers }),
+          axios.get(`/api/wild-finds/${id}`, { headers }),
           axios.get('/api/users/me', { headers })
         ]);
 
@@ -117,7 +115,7 @@ const SavedFindDetailsPage = () => {
     };
 
     fetchAllDetails();
-  }, [id, navigate]);
+  }, [id]);
 
   const handleDelete = async () => {
     if (!window.confirm('Are you sure you want to permanently delete this find?')) {
@@ -128,6 +126,7 @@ const SavedFindDetailsPage = () => {
     const token = localStorage.getItem('authToken');
 
     try {
+      // --- FIX: Changed path back to /api/wild-finds/ ---
       await axios.delete(`/api/wild-finds/${id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -149,9 +148,9 @@ const SavedFindDetailsPage = () => {
         return <WildFindDetails find={find} />;
     }
   };
-
-  // <-- NEW: Simple boolean flag to check for ownership
-  const isOwner = currentUser && find && currentUser._id === find.userId;
+  
+  // The backend populates `userId` with the user object, so we access the id via `_id`
+  const isOwner = currentUser && find && find.userId && currentUser._id === find.userId._id;
 
   return (
     <div className="w-full max-w-6xl mx-auto p-4">
@@ -159,7 +158,6 @@ const SavedFindDetailsPage = () => {
         <Link to="/saved-finds" className="text-vav-accent-primary hover:underline">
           &larr; Back to My Saved Finds
         </Link>
-        {/* --- UPDATED: Conditionally render the delete button --- */}
         {isOwner && (
             <div className="flex items-center gap-4">
                 {deleteError && <p className="text-red-400">{deleteError}</p>}
