@@ -1,4 +1,4 @@
-// c:\Users\david\Desktop\projects\vintageaudiovault\server\utils\geminiService.js
+// server/utils/geminiService.js
 const {
   GoogleGenerativeAI,
   HarmBlockThreshold,
@@ -43,6 +43,186 @@ const flashModel = genAI.getGenerativeModel ({
   model: MODEL_NAME_FLASH,
   safetySettings: DEFAULT_SAFETY_SETTINGS,
 });
+
+// --- NEW FUNCTION TO HANDLE IDENTIFICATION AND ANALYSIS ---
+async function getIdentificationAndAnalysisForItem (userInput, fileObject) {
+  const {make, model, itemType, condition, notes} = userInput;
+
+  const validItemTypes = [
+    'Receiver',
+    'Turntable',
+    'Speakers',
+    'Amplifier',
+    'Pre-amplifier',
+    'Tape Deck',
+    'Reel to Reel',
+    'CD Player',
+    'Equalizer',
+    'Tuner',
+    'Integrated Amplifier',
+    'Other',
+  ];
+
+  const prompt = `
+    You are a vintage audio expert performing a two-step analysis for a user adding an item to their collection.
+
+    Step 1: Identification & Comparison
+    First, analyze the provided image to identify the audio equipment's make, model, and type.
+    Then, compare your visual finding to the user's text input.
+    - User's Input Make: "${make}"
+    - User's Input Model: "${model}"
+
+    Step 2: Comprehensive Analysis
+    Based on the CORRECTLY identified item from the image, generate a full analysis report. If the user's input was incorrect, base the entire report on your visual finding, not the user's text.
+
+    Your Task: Generate a single JSON object that includes both the identification result and the full analysis.
+
+    The JSON object must contain:
+    1. "identificationResult": An object detailing the comparison from Step 1. It must have the following sub-fields:
+        - "isMatch": A boolean (true or false) indicating if the visually identified item matches the user's input make and model.
+        - "userInput": A string showing what the user entered (e.g., "Pioneer Receiver").
+        - "aiIdentifiedAs": A string showing what you identified from the image (e.g., "Marantz 2270"). If you cannot identify the item, state that.
+        - "identifiedMake": The make you identified from the image. If unidentified, use "Unidentified Make".
+        - "identifiedModel": The model you identified from the image. If unidentified, use "Model Not Clearly Identifiable".
+        - "identifiedItemType": The type of item you identified. This MUST be one of the following exact strings: ${JSON.stringify (validItemTypes)}.
+        - "confidence": Your confidence in the visual identification ('High', 'Medium', or 'Low').
+
+    2. "analysis": An object containing the full report from Step 2, based on the visually identified item. This object must contain all the fields listed below. If you cannot confidently identify the item, these fields should contain appropriate "Not Available" messages.
+        - "summary": A compelling, single-sentence summary of the item's reputation.
+        - "detailedAnalysis": A multi-paragraph description of the item.
+        - "valueInsight": An object with "productionDates", "marketDesirability", "estimatedValueUSD", and "valuationConfidence". You must always provide a value range and confidence, even if it's wide and 'Low'.
+        - "potentialIssues": A bulleted list of common issues as a single string.
+        - "restorationTips": A bulleted list of restoration tips as a single string.
+        - "suggestedGear": An array of 3-5 suggested complementary components.
+        - "disclaimer": A standard disclaimer.
+
+    Return ONLY the raw JSON object.
+  `;
+
+  const schema = {
+    type: 'OBJECT',
+    properties: {
+      identificationResult: {
+        type: 'OBJECT',
+        properties: {
+          isMatch: {type: 'BOOLEAN'},
+          userInput: {type: 'STRING'},
+          aiIdentifiedAs: {type: 'STRING'},
+          identifiedMake: {type: 'STRING'},
+          identifiedModel: {type: 'STRING'},
+          identifiedItemType: {type: 'STRING', enum: validItemTypes},
+          confidence: {type: 'STRING'},
+        },
+        required: [
+          'isMatch',
+          'userInput',
+          'aiIdentifiedAs',
+          'identifiedMake',
+          'identifiedModel',
+          'identifiedItemType',
+          'confidence',
+        ],
+      },
+      analysis: {
+        type: 'OBJECT',
+        properties: {
+          summary: {type: 'STRING'},
+          detailedAnalysis: {type: 'STRING'},
+          valueInsight: {
+            type: 'OBJECT',
+            properties: {
+              productionDates: {type: 'STRING'},
+              marketDesirability: {type: 'STRING'},
+              estimatedValueUSD: {type: 'STRING'},
+              valuationConfidence: {type: 'STRING'},
+            },
+            required: [
+              'productionDates',
+              'marketDesirability',
+              'estimatedValueUSD',
+              'valuationConfidence',
+            ],
+          },
+          potentialIssues: {type: 'STRING'},
+          restorationTips: {type: 'STRING'},
+          suggestedGear: {
+            type: 'ARRAY',
+            items: {
+              type: 'OBJECT',
+              properties: {
+                make: {type: 'STRING'},
+                model: {type: 'STRING'},
+                reason: {type: 'STRING'},
+              },
+              required: ['make', 'model', 'reason'],
+            },
+          },
+          disclaimer: {type: 'STRING'},
+        },
+        required: [
+          'summary',
+          'detailedAnalysis',
+          'valueInsight',
+          'potentialIssues',
+          'restorationTips',
+          'suggestedGear',
+          'disclaimer',
+        ],
+      },
+    },
+    required: ['identificationResult', 'analysis'],
+  };
+
+  try {
+    const imagePart = {
+      inlineData: {
+        data: fileObject.buffer.toString ('base64'),
+        mimeType: fileObject.mimetype,
+      },
+    };
+
+    const parts = [{text: prompt}, imagePart];
+
+    const result = await proModel.generateContent ({
+      contents: [{role: 'user', parts: parts}],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: schema,
+        temperature: 0.6,
+      },
+    });
+    const responseText = result.response.text ();
+    return JSON.parse (responseText);
+  } catch (error) {
+    console.error ('Error in getIdentificationAndAnalysisForItem:', error);
+    return {
+      error: `Gemini AI analysis failed: ${error.message}`,
+      identificationResult: {
+        isMatch: false,
+        userInput: `${make} ${model}`,
+        aiIdentifiedAs: 'Error during analysis',
+        identifiedMake: make,
+        identifiedModel: model,
+        identifiedItemType: itemType,
+        confidence: 'Error',
+      },
+      analysis: {
+        summary: 'AI analysis could not be completed.',
+        detailedAnalysis: 'An error occurred during generation. Please try again later.',
+        valueInsight: {
+          productionDates: 'N/A',
+          marketDesirability: 'N/A',
+          estimatedValueUSD: 'Error',
+          valuationConfidence: 'Error',
+        },
+        potentialIssues: 'N/A',
+        restorationTips: 'N/A',
+        suggestedGear: [],
+        disclaimer: 'An error occurred during AI analysis.',
+      },
+    };
+  }
+}
 
 async function getAiFullAnalysisForCollectionItem (itemData) {
   const {make, model, itemType, condition, notes, photoUrl} = itemData;
@@ -177,7 +357,7 @@ async function getComprehensiveWildFindAnalysis (
     1.  "identifiedItem": A string combining the make and model (e.g., "Marantz 2270").
     2.  "visualCondition": A string containing the original visual condition description provided above.
     3.  "estimatedValue": A string representing the estimated market value range in USD (e.g., "$400 - $600").
-    4.  "valuationConfidence": Your confidence in the valuation ('High', 'Medium', or 'Low'). If information is limited (e.g., for a generic model), provide a wider value range and a 'Low' confidence. You must always provide a value and never refuse to guess.
+    4.  "valuationConfidence": Your confidence in the valuation ('High', 'Medium', 'Low'). If information is limited (e.g., for a generic model), provide a wider value range and a 'Low' confidence. You must always provide a value and never refuse to guess.
     5.  "detailedAnalysis": A detailed paragraph describing the item, its history, its reputation (e.g., sound quality, build quality), and its place in the vintage audio market.
     6.  "potentialIssues": A bulleted list of common problems or age-related issues to check for with this specific model. Format this as a single string with each point starting with a hyphen and separated by a newline character (\\n).
     7.  "restorationTips": A bulleted list of common restoration or enhancement tips for this model. Format this as a single string with each point starting with a hyphen and separated by a newline character (\\n).
@@ -569,7 +749,6 @@ async function urlToBase64 (url) {
 }
 
 async function getAiValueInsight (make, model, condition, imageUrls = []) {
-  // --- START: FIX FOR JSON PARSING ERROR ---
   const itemInfo = `Item: ${make} ${model}, Condition: ${condition}.`;
   const personaAndTask = `You are a vintage audio equipment expert providing a market valuation.
   
@@ -581,7 +760,7 @@ async function getAiValueInsight (make, model, condition, imageUrls = []) {
   - "productionDates": The production years (e.g., "1978-1981").
   - "marketDesirability": A brief assessment of how sought-after this item is.
   - "estimatedValueUSD": Your estimated market value range in USD (e.g., "$500 - $750").
-  - "valuationConfidence": Your confidence in the estimate ('High', 'Medium', or 'Low').
+  - "valuationConfidence": Your confidence in the estimate ('High', 'Medium', 'Low').
   - "disclaimer": A standard disclaimer.`;
 
   const schema = {
@@ -656,7 +835,6 @@ async function getAiValueInsight (make, model, condition, imageUrls = []) {
       disclaimer: 'An error occurred during AI analysis.',
     };
   }
-  // --- END: FIX FOR JSON PARSING ERROR ---
 }
 
 async function getRelatedGearSuggestions (
@@ -725,14 +903,11 @@ const uploadToGcs = async (file, bucketName, storage) => {
 
   const bucket = storage.bucket (bucketName);
 
-  // Sanitize the filename to remove characters that are not URL-friendly
-  // This replaces anything that isn't a letter, number, dot, underscore, or hyphen with an underscore.
   const sanitizedFilename = file.originalname.replace (/[^\w.-]/g, '_');
 
   const blob = bucket.file (`audio-items/${Date.now ()}-${sanitizedFilename}`);
 
   try {
-    // With Uniform bucket-level access, we only need to save the file.
     await blob.save (file.buffer, {
       metadata: {
         contentType: file.mimetype,
@@ -762,6 +937,7 @@ const deleteFromGcs = async (fileUrl, bucketName, storage) => {
 };
 
 module.exports = {
+  getIdentificationAndAnalysisForItem,
   getAiFullAnalysisForCollectionItem,
   getComprehensiveWildFindAnalysis,
   getVisualAnalysis,

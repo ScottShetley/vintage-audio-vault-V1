@@ -8,6 +8,7 @@ const AudioItem = require('../models/AudioItem');
 const WildFind = require('../models/wildFind');
 
 const {
+  getIdentificationAndAnalysisForItem,
   getAiFullAnalysisForCollectionItem,
   getVisualAnalysis,
   getComprehensiveWildFindAnalysis,
@@ -27,7 +28,6 @@ const uploadMultiple = multer({
   limits: { fileSize: 5 * 1024 * 1024 },
 }).array('photos', 5);
 
-// This is no longer used by the primary 'add' or 'edit' routes
 const uploadSingle = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
@@ -43,7 +43,6 @@ const uploadWildFind = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
 }).single('image');
 
-// This middleware is now only used for single-file AI analysis routes
 const uploadToGcsMiddleware = async (req, res, next) => {
   if (!req.file) {
     return next();
@@ -175,15 +174,20 @@ router.get('/:id', protect, async (req, res) => {
 });
 
 
-// POST /api/items --- UPDATED FOR MULTIPLE IMAGE UPLOAD
+// POST /api/items --- UPDATED TO USE THE NEW, UNIFIED AI SERVICE
 router.post(
   '/',
   protect,
   uploadMultiple,
   async (req, res) => {
     try {
+      // --- Step 1: Handle Image Uploads ---
       let uploadedImageUrls = [];
       const primaryImageForAnalysis = req.files && req.files.length > 0 ? req.files[0] : null;
+
+      if (!primaryImageForAnalysis) {
+        return res.status(400).json({ message: 'An image is required to create a new item.' });
+      }
 
       if (req.files && req.files.length > 0) {
         const gcs = req.app.locals.gcs;
@@ -196,45 +200,41 @@ router.post(
         uploadedImageUrls = await Promise.all(uploadPromises);
       }
 
-      const userInput = { make: req.body.make, model: req.body.model };
-      const identification = {
-        wasCorrected: false,
-        userInput: `${userInput.make} ${userInput.model}`,
-        aiIdentifiedAs: '',
-        confidence: '',
-      };
-
-      let finalMake = userInput.make;
-      let finalModel = userInput.model;
-
-      if (primaryImageForAnalysis) {
-        const visualAnalysisArray = await getVisualAnalysis(primaryImageForAnalysis);
-        if (visualAnalysisArray && visualAnalysisArray.length > 0) {
-          const aiIdentified = visualAnalysisArray[0];
-          identification.confidence = aiIdentified.confidence || 'Medium';
-          const aiIsConfident = aiIdentified.make !== 'Unidentified Make' && aiIdentified.model !== 'Model Not Clearly Identifiable';
-          const isDifferent = aiIdentified.make.toLowerCase().trim() !== userInput.make.toLowerCase().trim() || aiIdentified.model.toLowerCase().trim() !== userInput.model.toLowerCase().trim();
-          if (aiIsConfident && isDifferent) {
-            identification.wasCorrected = true;
-            identification.aiIdentifiedAs = `${aiIdentified.make} ${aiIdentified.model}`;
-            finalMake = aiIdentified.make;
-            finalModel = aiIdentified.model;
-          }
-        }
+      // --- Step 2: Call the New, Unified AI Service ---
+      const userInput = { ...req.body };
+      const fullAiResponse = await getIdentificationAndAnalysisForItem(userInput, primaryImageForAnalysis);
+      
+      if (fullAiResponse.error) {
+        throw new Error(fullAiResponse.error);
       }
       
+      const { identificationResult, analysis } = fullAiResponse;
+
+      // --- Step 3: Prepare Data for Database ---
       const isForSale = req.body.isForSale === 'true';
       const isOpenToTrade = req.body.isOpenToTrade === 'true';
 
       const newItemData = {
         user: req.user.id,
         ...req.body,
+        make: identificationResult.identifiedMake,
+        model: identificationResult.identifiedModel,
+        // The itemType from user input remains for now, it will be corrected on acceptance
+        itemType: req.body.itemType, 
         isForSale,
         isOpenToTrade,
         isFullyFunctional: String(req.body.isFullyFunctional).toLowerCase() === 'true',
         photoUrls: uploadedImageUrls,
         primaryImageUrl: uploadedImageUrls.length > 0 ? uploadedImageUrls[0] : null,
-        identification: identification,
+        identification: {
+          wasCorrected: !identificationResult.isMatch,
+          userInput: identificationResult.userInput,
+          aiIdentifiedAs: identificationResult.aiIdentifiedAs,
+          identifiedItemType: identificationResult.identifiedItemType, // <-- SAVE THE SUGGESTED ITEM TYPE
+          confidence: identificationResult.confidence,
+        },
+        aiAnalysis: analysis,
+        aiAnalyzedOn: new Date(),
       };
       
       if (isForSale && req.body.askingPrice) {
@@ -244,18 +244,7 @@ router.post(
         newItemData.askingPrice = undefined;
       }
 
-      const aiAnalysis = await getAiFullAnalysisForCollectionItem({
-        make: finalMake,
-        model: finalModel,
-        itemType: newItemData.itemType,
-        condition: newItemData.condition,
-        notes: newItemData.notes,
-        photoUrl: uploadedImageUrls[0] || null,
-      });
-
-      newItemData.aiAnalysis = aiAnalysis;
-      newItemData.aiAnalyzedOn = new Date();
-
+      // --- Step 4: Save to Database and Respond ---
       const audioItem = new AudioItem(newItemData);
       await audioItem.save();
 
@@ -287,9 +276,7 @@ router.put(
       if (req.body.existingPhotoUrls) {
         item.photoUrls = JSON.parse(req.body.existingPhotoUrls);
       } else if (!req.files || req.files.length === 0) {
-        // --- ADDED: Handle case where existingPhotoUrls is missing but no new files are uploaded ---
         // This prevents accidental deletion of all photos when only changing text fields.
-        // No action needed here, item.photoUrls remains as is.
       } else {
         item.photoUrls = [];
       }
@@ -337,7 +324,6 @@ router.put(
 
       const updatedItem = await item.save();
       
-      // --- UPDATED: Ensure the full, populated item is returned ---
       const populatedItem = await AudioItem.findById(updatedItem._id).populate('user', 'username');
       res.json(populatedItem);
 
@@ -353,7 +339,7 @@ router.put(
   }
 );
 
-// New route to handle accepting the AI's identification suggestion.
+// New route to handle accepting the AI's identification suggestion. --- UPDATED ---
 router.patch('/:id/accept-correction', protect, async (req, res) => {
   try {
     const item = await AudioItem.findById(req.params.id);
@@ -366,16 +352,24 @@ router.patch('/:id/accept-correction', protect, async (req, res) => {
       return res.status(400).json({ message: 'No correction to accept.' });
     }
 
+    // Split the 'aiIdentifiedAs' string to get the corrected make and model
     const parts = item.identification.aiIdentifiedAs.split(' ');
     const newMake = parts[0];
     const newModel = parts.slice(1).join(' ');
 
+    // --- UPDATE THE FIELDS ---
     item.make = newMake;
     item.model = newModel;
+    // Update the itemType if the AI provided a corrected one
+    if (item.identification.identifiedItemType) {
+      item.itemType = item.identification.identifiedItemType;
+    }
 
+    // --- RESET THE IDENTIFICATION FLAGS ---
     item.identification.wasCorrected = false;
     item.identification.userInput = '';
     item.identification.aiIdentifiedAs = '';
+    item.identification.identifiedItemType = ''; // Clear the stored suggestion
 
     const updatedItem = await item.save();
     res.json(updatedItem);
