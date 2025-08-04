@@ -21,12 +21,16 @@ const EditItemPage = () => {
   const [notes, setNotes] = useState('');
   const [newPhotos, setNewPhotos] = useState([]);
   const [existingPhotoUrls, setExistingPhotoUrls] = useState([]);
+  const [primaryImageUrl, setPrimaryImageUrl] = useState('');
 
   // UI states
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
+  const [primaryImageUpdating, setPrimaryImageUpdating] = useState(false);
+  const [primaryImageSuccess, setPrimaryImageSuccess] = useState('');
+
 
   const itemTypeOptions = ['Receiver', 'Turntable', 'Speakers', 'Amplifier', 'Pre-amplifier', 'Tape Deck', 'Reel to Reel', 'CD Player', 'Equalizer', 'Tuner', 'Integrated Amplifier', 'Other'];
   const conditionOptions = ['Mint', 'Near Mint', 'Excellent', 'Very Good', 'Good', 'Fair', 'For Parts/Not Working', 'Restored'];
@@ -51,9 +55,7 @@ const EditItemPage = () => {
 
       try {
         const response = await axios.get(`/api/items/${id}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { Authorization: `Bearer ${token}` },
         });
         const itemData = response.data;
 
@@ -69,6 +71,7 @@ const EditItemPage = () => {
         setIssuesDescription(itemData.issuesDescription || '');
         setNotes(itemData.notes || '');
         setExistingPhotoUrls(itemData.photoUrls || []);
+        setPrimaryImageUrl(itemData.primaryImageUrl || (itemData.photoUrls && itemData.photoUrls[0]) || '');
 
       } catch (err) {
         console.error('Failed to load item details for editing:', err);
@@ -88,6 +91,39 @@ const EditItemPage = () => {
 
   const handleRemoveExistingPhoto = (urlToRemove) => {
     setExistingPhotoUrls(existingPhotoUrls.filter(url => url !== urlToRemove));
+  };
+  
+  // --- UPDATED: Handler now uses the response data to re-sync state ---
+  const handleSetPrimaryImage = async (newPrimaryUrl) => {
+    setPrimaryImageUpdating(true);
+    setPrimaryImageSuccess('');
+    setError(null);
+    const token = localStorage.getItem('authToken');
+
+    const formData = new FormData();
+    formData.append('primaryImageUrl', newPrimaryUrl);
+
+    try {
+        const response = await axios.put(`/api/items/${id}`, formData, { 
+            headers: { 
+                'Content-Type': 'multipart/form-data',
+                Authorization: `Bearer ${token}` 
+            } 
+        });
+        
+        // Use the returned data to update the entire state, preventing sync issues
+        const updatedItem = response.data;
+        setPrimaryImageUrl(updatedItem.primaryImageUrl);
+        setExistingPhotoUrls(updatedItem.photoUrls);
+
+        setPrimaryImageSuccess('Cover photo updated!');
+        setTimeout(() => setPrimaryImageSuccess(''), 2000);
+    } catch (err) {
+        console.error('Failed to update primary image:', err);
+        setError(err.response?.data?.message || 'Failed to update cover photo.');
+    } finally {
+        setPrimaryImageUpdating(false);
+    }
   };
 
   const handleSubmit = async (event) => {
@@ -123,10 +159,6 @@ const EditItemPage = () => {
       formData.append('photos', newPhotos[i]);
     }
     
-    // --- BUG FIX ---
-    // This line is essential. It tells the backend which existing photos
-    // to keep. Without it, the backend doesn't know if any photos were
-    // removed, and it can cause the file upload middleware to fail.
     formData.append('existingPhotoUrls', JSON.stringify(existingPhotoUrls));
 
     try {
@@ -171,176 +203,142 @@ const EditItemPage = () => {
     <div className="w-full max-w-2xl mx-auto p-4">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-serif text-vav-accent-primary">Edit Item</h1>
-        <Link
-          to={`/item/${id}`}
-          className="text-vav-accent-primary hover:text-vav-accent-secondary"
-        >
+        <Link to={`/item/${id}`} className="text-vav-accent-primary hover:text-vav-accent-secondary">
           &larr; Back to Details
         </Link>
       </div>
 
       <form onSubmit={handleSubmit} className="bg-vav-content-card shadow-xl rounded-lg p-6 md:p-8 space-y-6">
         
+        <div className="space-y-4 rounded-lg bg-vav-background p-4 border border-vav-accent-primary">
+            <h2 className={labelClass}>Manage Photos</h2>
+            {primaryImageSuccess && <p className="text-green-400 text-sm text-center">{primaryImageSuccess}</p>}
+            {existingPhotoUrls.length > 0 ? (
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-4">
+                    {existingPhotoUrls.map((url, index) => {
+                        const isPrimary = url === primaryImageUrl;
+                        return (
+                            <div key={index} className="relative group">
+                                <img src={url} alt={`Existing ${index + 1}`} className={`w-full h-24 object-cover rounded-md transition-all ${isPrimary ? 'ring-4 ring-vav-accent-primary' : ''}`} onError={(e) => { e.target.onerror = null; e.target.src = placeholderImageUrl; }} />
+                                {isPrimary && <div className="absolute top-1 left-1 bg-vav-accent-primary text-white text-xs px-2 py-0.5 rounded-full font-bold">Cover</div>}
+                                
+                                <div className="absolute inset-0 bg-black bg-opacity-50 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity p-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => handleSetPrimaryImage(url)}
+                                        disabled={isPrimary || primaryImageUpdating}
+                                        className="text-xs bg-blue-600 text-white px-2 py-1 rounded disabled:bg-gray-500 disabled:cursor-not-allowed mb-1 w-full text-center"
+                                    >
+                                        Set as Cover
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleRemoveExistingPhoto(url)}
+                                        className="text-xs bg-red-600 text-white px-2 py-1 rounded w-full text-center"
+                                    >
+                                        Remove
+                                    </button>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            ) : <p className="text-sm text-vav-text-secondary">No photos have been uploaded for this item yet.</p>}
+            
+            <div>
+                <label htmlFor="photos" className={`${labelClass} mt-4`}>Add New Photos</label>
+                <input
+                    type="file"
+                    id="photos"
+                    multiple
+                    accept="image/*"
+                    onChange={(e) => setNewPhotos(Array.from(e.target.files))}
+                    className={`block w-full text-sm ${inputClass} p-0 border-dashed`}
+                />
+            </div>
+        </div>
+        
         <div className="space-y-4 rounded-lg bg-vav-background p-4">
             <label className={labelClass}>Listing Options</label>
             <div className="flex items-center">
-                <input
-                    id="isForSale"
-                    type="checkbox"
-                    checked={isForSale}
-                    onChange={(e) => setIsForSale(e.target.checked)}
-                    className={checkboxClass}
-                />
-                <label htmlFor="isForSale" className="ml-3 block text-sm text-vav-text">
-                    List this item for sale
-                </label>
+                <input id="isForSale" type="checkbox" checked={isForSale} onChange={(e) => setIsForSale(e.target.checked)} className={checkboxClass} />
+                <label htmlFor="isForSale" className="ml-3 block text-sm text-vav-text">List this item for sale</label>
             </div>
             <div className="flex items-center">
-                <input
-                    id="isOpenToTrade"
-                    type="checkbox"
-                    checked={isOpenToTrade}
-                    onChange={(e) => setIsOpenToTrade(e.target.checked)}
-                    className={checkboxClass}
-                />
-                <label htmlFor="isOpenToTrade" className="ml-3 block text-sm text-vav-text">
-                    Open to trades for this item
-                </label>
+                <input id="isOpenToTrade" type="checkbox" checked={isOpenToTrade} onChange={(e) => setIsOpenToTrade(e.target.checked)} className={checkboxClass} />
+                <label htmlFor="isOpenToTrade" className="ml-3 block text-sm text-vav-text">Open to trades for this item</label>
             </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label htmlFor="make" className={labelClass}>Make <span className="text-red-500">*</span></label>
-            <input type="text" id="make" value={make} onChange={(e) => setMake(e.target.value)} className={inputClass} required />
-          </div>
-          <div>
-            <label htmlFor="model" className={labelClass}>Model <span className="text-red-500">*</span></label>
-            <input type="text" id="model" value={model} onChange={(e) => setModel(e.target.value)} className={inputClass} required />
-          </div>
+            <div>
+                <label htmlFor="make" className={labelClass}>Make <span className="text-red-500">*</span></label>
+                <input type="text" id="make" value={make} onChange={(e) => setMake(e.target.value)} className={inputClass} required />
+            </div>
+            <div>
+                <label htmlFor="model" className={labelClass}>Model <span className="text-red-500">*</span></label>
+                <input type="text" id="model" value={model} onChange={(e) => setModel(e.target.value)} className={inputClass} required />
+            </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label htmlFor="itemType" className={labelClass}>Item Type <span className="text-red-500">*</span></label>
-            <select id="itemType" value={itemType} onChange={(e) => setItemType(e.target.value)} className={inputClass} required>
-              {itemTypeOptions.map(option => <option key={option} value={option}>{option}</option>)}
-            </select>
-          </div>
-          <div>
-            <label htmlFor="condition" className={labelClass}>Condition <span className="text-red-500">*</span></label>
-            <select id="condition" value={condition} onChange={(e) => setCondition(e.target.value)} className={inputClass} required>
-              {conditionOptions.map(option => <option key={option} value={option}>{option}</option>)}
-            </select>
-          </div>
+            <div>
+                <label htmlFor="itemType" className={labelClass}>Item Type <span className="text-red-500">*</span></label>
+                <select id="itemType" value={itemType} onChange={(e) => setItemType(e.target.value)} className={inputClass} required>
+                    {itemTypeOptions.map(option => <option key={option} value={option}>{option}</option>)}
+                </select>
+            </div>
+            <div>
+                <label htmlFor="condition" className={labelClass}>Condition <span className="text-red-500">*</span></label>
+                <select id="condition" value={condition} onChange={(e) => setCondition(e.target.value)} className={inputClass} required>
+                    {conditionOptions.map(option => <option key={option} value={option}>{option}</option>)}
+                </select>
+            </div>
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
                 <label htmlFor="privacy" className={labelClass}>Visibility</label>
-                <select 
-                    id="privacy" 
-                    value={privacy} 
-                    onChange={(e) => setPrivacy(e.target.value)} 
-                    className={`${inputClass} disabled:bg-vav-background-alt disabled:cursor-not-allowed`}
-                    disabled={isForSale || isOpenToTrade}
-                >
+                <select id="privacy" value={privacy} onChange={(e) => setPrivacy(e.target.value)} className={`${inputClass} disabled:bg-vav-background-alt disabled:cursor-not-allowed`} disabled={isForSale || isOpenToTrade}>
                     <option value="Public">Public (Visible to others)</option>
                     <option value="Private">Private (Visible only to you)</option>
                 </select>
-                {(isForSale || isOpenToTrade) && (
-                    <p className="text-xs text-vav-text-secondary mt-1">Items for sale or trade must be public.</p>
-                )}
+                {(isForSale || isOpenToTrade) && (<p className="text-xs text-vav-text-secondary mt-1">Items for sale or trade must be public.</p>)}
             </div>
         </div>
         
         {isForSale && (
             <div>
                 <label htmlFor="askingPrice" className={labelClass}>Asking Price ($)</label>
-                <input 
-                    type="number" 
-                    id="askingPrice" 
-                    value={askingPrice} 
-                    onChange={(e) => setAskingPrice(e.target.value)} 
-                    className={inputClass}
-                    placeholder="e.g., 450.00"
-                    min="0"
-                    step="0.01"
-                    required
-                />
+                <input type="number" id="askingPrice" value={askingPrice} onChange={(e) => setAskingPrice(e.target.value)} className={inputClass} placeholder="e.g., 450.00" min="0" step="0.01" required />
             </div>
         )}
 
         <div>
-          <div className="flex items-center">
-            <input
-              id="isFullyFunctional"
-              type="checkbox"
-              checked={isFullyFunctional}
-              onChange={(e) => setIsFullyFunctional(e.target.checked)}
-              className={checkboxClass}
-            />
-            <label htmlFor="isFullyFunctional" className="ml-2 block text-sm text-vav-text">
-              Fully Functional?
-            </label>
-          </div>
+            <div className="flex items-center">
+                <input id="isFullyFunctional" type="checkbox" checked={isFullyFunctional} onChange={(e) => setIsFullyFunctional(e.target.checked)} className={checkboxClass} />
+                <label htmlFor="isFullyFunctional" className="ml-2 block text-sm text-vav-text">Fully Functional?</label>
+            </div>
         </div>
 
         {!isFullyFunctional && (
-          <div>
-            <label htmlFor="issuesDescription" className={labelClass}>Issues Description</label>
-            <textarea id="issuesDescription" value={issuesDescription} onChange={(e) => setIssuesDescription(e.target.value)} className={inputClass} rows="3" />
-          </div>
-        )}
-
-        <div>
-          <label htmlFor="notes" className={labelClass}>Notes</label>
-          <textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} className={inputClass} rows="4" />
-        </div>
-
-        {existingPhotoUrls.length > 0 && (
-          <div>
-            <label className={labelClass}>Existing Photos</label>
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 mt-2">
-              {existingPhotoUrls.map((url, index) => (
-                <div key={index} className="relative">
-                  <img src={url} alt={`Existing ${index + 1}`} className="w-full h-24 object-cover rounded-md" onError={(e) => { e.target.onerror = null; e.target.src = placeholderImageUrl; }} />
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveExistingPhoto(url)}
-                    className="absolute top-0 right-0 bg-red-600 text-white rounded-full h-6 w-6 flex items-center justify-center text-xs -mt-2 -mr-2 hover:bg-red-700"
-                    aria-label="Remove"
-                  >
-                    &times;
-                  </button>
-                </div>
-              ))}
+            <div>
+                <label htmlFor="issuesDescription" className={labelClass}>Issues Description</label>
+                <textarea id="issuesDescription" value={issuesDescription} onChange={(e) => setIssuesDescription(e.target.value)} className={inputClass} rows="3" />
             </div>
-          </div>
         )}
 
         <div>
-          <label htmlFor="photos" className={labelClass}>Add New Photos</label>
-          <input
-            type="file"
-            id="photos"
-            multiple
-            accept="image/*"
-            onChange={(e) => setNewPhotos(Array.from(e.target.files))}
-            className={`block w-full text-sm ${inputClass} p-0 border-dashed`}
-          />
+            <label htmlFor="notes" className={labelClass}>Notes</label>
+            <textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} className={inputClass} rows="4" />
         </div>
 
         <div className="pt-4">
-          {error && (<p className="text-red-500 text-sm mb-4 text-center p-2 rounded">{error}</p>)}
-          {successMessage && (<p className="text-green-400 text-sm mb-4 text-center p-2 rounded">{successMessage}</p>)}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-vav-accent-primary hover:bg-vav-accent-secondary text-vav-background font-semibold py-3 px-4 rounded-md shadow-md disabled:opacity-50"
-          >
-            {loading ? 'Updating...' : 'Update Item'}
-          </button>
+            {error && (<p className="text-red-500 text-sm mb-4 text-center p-2 rounded">{error}</p>)}
+            {successMessage && (<p className="text-green-400 text-sm mb-4 text-center p-2 rounded">{successMessage}</p>)}
+            <button type="submit" disabled={loading} className="w-full bg-vav-accent-primary hover:bg-vav-accent-secondary text-vav-background font-semibold py-3 px-4 rounded-md shadow-md disabled:opacity-50">
+                {loading ? 'Updating...' : 'Update Item'}
+            </button>
         </div>
       </form>
     </div>

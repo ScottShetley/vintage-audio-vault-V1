@@ -8,7 +8,6 @@ const audioItemSchema = new mongoose.Schema (
       ref: 'User',
       required: [true, 'Audio item must belong to a user.'],
     },
-    // --- UPDATED: Replaced 'status' with specific boolean fields ---
     isForSale: {
       type: Boolean,
       default: false,
@@ -94,6 +93,10 @@ const audioItemSchema = new mongoose.Schema (
       trim: true,
     },
     photoUrls: [String],
+    // --- NEW: Field to store the primary cover image URL ---
+    primaryImageUrl: {
+      type: String,
+    },
     purchaseDate: Date,
     purchasePrice: Number,
     askingPrice: {
@@ -107,7 +110,6 @@ const audioItemSchema = new mongoose.Schema (
       wasCorrected: {type: Boolean, default: false},
       userInput: {type: String, default: ''},
       aiIdentifiedAs: {type: String, default: ''},
-      // --- NEW: Field to store the AI's confidence level ---
       confidence: {type: String, default: ''},
     },
 
@@ -125,7 +127,6 @@ const audioItemSchema = new mongoose.Schema (
   }
 );
 
-// --- This part prevents Mongoose from recompiling the model if it already exists ---
 const AudioItem =
   mongoose.models.AudioItem || mongoose.model ('AudioItem', audioItemSchema);
 

@@ -86,7 +86,7 @@ router.get('/discover', protect, async (req, res) => {
     const normalizedAudioItems = audioItems.map(item => ({
       id: item._id,
       title: `${item.make} ${item.model}`,
-      imageUrl: item.photoUrls?.[0],
+      imageUrl: item.primaryImageUrl || item.photoUrls?.[0],
       isForSale: item.isForSale,
       isOpenToTrade: item.isOpenToTrade,
       detailPath: `/item/${item._id}`,
@@ -155,14 +155,7 @@ router.get('/:id', protect, async (req, res) => {
       return res.status(404).json({ message: 'Item not found' });
     }
 
-    if (item.privacy === 'Public') {
-      return res.json(item);
-    }
-
-    if (
-      item.privacy === 'Private' &&
-      item.user._id.toString() === req.user.id
-    ) {
+    if (item.privacy === 'Public' || (item.privacy === 'Private' && item.user._id.toString() === req.user.id)) {
       return res.json(item);
     }
 
@@ -181,17 +174,17 @@ router.get('/:id', protect, async (req, res) => {
   }
 });
 
+
 // POST /api/items --- UPDATED FOR MULTIPLE IMAGE UPLOAD
 router.post(
   '/',
   protect,
-  uploadMultiple, // <-- Changed from uploadSingle to uploadMultiple
+  uploadMultiple,
   async (req, res) => {
     try {
       let uploadedImageUrls = [];
       const primaryImageForAnalysis = req.files && req.files.length > 0 ? req.files[0] : null;
 
-      // Upload all images to GCS
       if (req.files && req.files.length > 0) {
         const gcs = req.app.locals.gcs;
         if (!gcs || !gcs.bucketName) {
@@ -203,15 +196,12 @@ router.post(
         uploadedImageUrls = await Promise.all(uploadPromises);
       }
 
-      const userInput = {
-        make: req.body.make,
-        model: req.body.model,
-      };
+      const userInput = { make: req.body.make, model: req.body.model };
       const identification = {
         wasCorrected: false,
         userInput: `${userInput.make} ${userInput.model}`,
         aiIdentifiedAs: '',
-        confidence: '', // <-- Initialize confidence field
+        confidence: '',
       };
 
       let finalMake = userInput.make;
@@ -221,20 +211,9 @@ router.post(
         const visualAnalysisArray = await getVisualAnalysis(primaryImageForAnalysis);
         if (visualAnalysisArray && visualAnalysisArray.length > 0) {
           const aiIdentified = visualAnalysisArray[0];
-          
-          // --- NEW: Save the confidence score from the AI analysis ---
           identification.confidence = aiIdentified.confidence || 'Medium';
-
-          const aiIsConfident =
-            aiIdentified.make !== 'Unidentified Make' &&
-            aiIdentified.model !== 'Model Not Clearly Identifiable';
-
-          const isDifferent =
-            aiIdentified.make.toLowerCase().trim() !==
-              userInput.make.toLowerCase().trim() ||
-            aiIdentified.model.toLowerCase().trim() !==
-              userInput.model.toLowerCase().trim();
-
+          const aiIsConfident = aiIdentified.make !== 'Unidentified Make' && aiIdentified.model !== 'Model Not Clearly Identifiable';
+          const isDifferent = aiIdentified.make.toLowerCase().trim() !== userInput.make.toLowerCase().trim() || aiIdentified.model.toLowerCase().trim() !== userInput.model.toLowerCase().trim();
           if (aiIsConfident && isDifferent) {
             identification.wasCorrected = true;
             identification.aiIdentifiedAs = `${aiIdentified.make} ${aiIdentified.model}`;
@@ -252,10 +231,9 @@ router.post(
         ...req.body,
         isForSale,
         isOpenToTrade,
-        isFullyFunctional: String(
-          req.body.isFullyFunctional
-        ).toLowerCase() === 'true',
-        photoUrls: uploadedImageUrls, // <-- Use the array of uploaded URLs
+        isFullyFunctional: String(req.body.isFullyFunctional).toLowerCase() === 'true',
+        photoUrls: uploadedImageUrls,
+        primaryImageUrl: uploadedImageUrls.length > 0 ? uploadedImageUrls[0] : null,
         identification: identification,
       };
       
@@ -272,7 +250,7 @@ router.post(
         itemType: newItemData.itemType,
         condition: newItemData.condition,
         notes: newItemData.notes,
-        photoUrl: uploadedImageUrls[0] || null, // <-- Use the first image for full analysis
+        photoUrl: uploadedImageUrls[0] || null,
       });
 
       newItemData.aiAnalysis = aiAnalysis;
@@ -308,6 +286,10 @@ router.put(
 
       if (req.body.existingPhotoUrls) {
         item.photoUrls = JSON.parse(req.body.existingPhotoUrls);
+      } else if (!req.files || req.files.length === 0) {
+        // --- ADDED: Handle case where existingPhotoUrls is missing but no new files are uploaded ---
+        // This prevents accidental deletion of all photos when only changing text fields.
+        // No action needed here, item.photoUrls remains as is.
       } else {
         item.photoUrls = [];
       }
@@ -341,6 +323,11 @@ router.put(
       if (safeHasProperty('isOpenToTrade')) {
         item.isOpenToTrade = String(req.body.isOpenToTrade).toLowerCase() === 'true';
       }
+      
+      if (safeHasProperty('primaryImageUrl')) {
+        item.primaryImageUrl = req.body.primaryImageUrl;
+      }
+      
       if (item.isForSale && safeHasProperty('askingPrice')) {
         const price = parseFloat(req.body.askingPrice);
         item.askingPrice = Math.round((price + Number.EPSILON) * 100) / 100;
@@ -349,7 +336,10 @@ router.put(
       }
 
       const updatedItem = await item.save();
-      res.json(updatedItem);
+      
+      // --- UPDATED: Ensure the full, populated item is returned ---
+      const populatedItem = await AudioItem.findById(updatedItem._id).populate('user', 'username');
+      res.json(populatedItem);
 
     } catch (error) {
       console.error('Error updating item:', error);

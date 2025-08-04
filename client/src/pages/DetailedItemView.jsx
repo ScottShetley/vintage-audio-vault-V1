@@ -108,7 +108,6 @@ const DetailedItemView = () => {
     }
   };
 
-  // --- NEW: Helper to get color class based on confidence score ---
   const getConfidenceClass = (confidence) => {
     switch (confidence?.toLowerCase()) {
       case 'high':
@@ -199,7 +198,8 @@ const DetailedItemView = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 mb-8 text-sm">
           <div className="md:col-span-2 mb-4">
             <h3 className="text-xl font-serif text-vav-text-secondary mb-3">Photo(s)</h3>
-            <ImageCarousel photos={item.photoUrls} />
+            {/* --- FIX: Pass primaryImageUrl to the carousel --- */}
+            <ImageCarousel photos={item.photoUrls} primaryImageUrl={item.primaryImageUrl} />
           </div>
           <div>
             <p className="text-vav-text-secondary">Item Type:</p>
@@ -218,7 +218,6 @@ const DetailedItemView = () => {
             <p className="text-vav-text font-medium">{item.isFullyFunctional ? 'Yes' : 'No'}</p>
           </div>
           
-          {/* --- NEW: Conditionally display the AI Confidence Score --- */}
           {confidenceScore && (
             <div>
               <p className="text-vav-text-secondary">AI Identification Confidence:</p>

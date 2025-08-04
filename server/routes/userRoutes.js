@@ -6,14 +6,14 @@ const mongoose = require('mongoose');
 const { protect } = require('../middleware/authMiddleware');
 const User = require('../models/User');
 const AudioItem = require('../models/AudioItem');
-const WildFind = require('../models/wildFind'); // <-- CORRECTED CASING
+const WildFind = require('../models/wildFind');
 
 // Unchanged - Gets basic info for the logged-in user
 router.get('/me', protect, async (req, res) => {
   res.status(200).json(req.user);
 });
 
-// Gets all items (Collection & Finds) for the logged-in user's dashboard
+// MODIFIED - Gets all items for the logged-in user's dashboard
 router.get('/dashboard', protect, async (req, res) => {
   try {
     const userId = req.user._id;
@@ -28,7 +28,8 @@ router.get('/dashboard', protect, async (req, res) => {
     const normalizedPersonalItems = personalItems.map(item => ({
       id: item._id,
       title: `${item.make} ${item.model}`,
-      imageUrl: item.photoUrls?.[0] || placeholderImageUrl,
+      // --- FIX: Prioritize primaryImageUrl, then first photo, then placeholder ---
+      imageUrl: item.primaryImageUrl || item.photoUrls?.[0] || placeholderImageUrl,
       tag: 'My Collection',
       detailPath: `/item/${item._id}`, 
       createdAt: item.createdAt,
@@ -69,7 +70,7 @@ router.get('/dashboard', protect, async (req, res) => {
 });
 
 
-// Powers the main social feed for followed users
+// Unchanged - Powers the main social feed for followed users
 router.get('/feed', protect, async (req, res) => {
   try {
     const loggedInUser = req.user;
@@ -132,7 +133,7 @@ router.get('/feed', protect, async (req, res) => {
   }
 });
 
-// Follow/Unfollow routes are unchanged
+// Unchanged - Follow/Unfollow routes
 router.post('/:id/follow', protect, async (req, res) => {
     const session = await mongoose.startSession ();
     session.startTransaction ();
@@ -211,7 +212,7 @@ router.post('/:id/unfollow', protect, async (req, res) => {
     }
 });
 
-// This route requires protection to check the follow status.
+// Unchanged - Get profile route
 router.get('/profile/:id', protect, async (req, res) => {
     try {
         const loggedInUserId = req.user.id;
@@ -233,7 +234,6 @@ router.get('/profile/:id', protect, async (req, res) => {
           }).sort ({createdAt: -1});
         }
 
-        // Determine the relationship between the logged-in user and the profile user.
         const isFollowing = req.user.following.map(id => id.toString()).includes(profileUserId);
         const isFollower = profileUser.followers.map(id => id.toString()).includes(loggedInUserId);
     
