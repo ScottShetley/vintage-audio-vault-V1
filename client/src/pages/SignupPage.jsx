@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { FaEye, FaEyeSlash } from 'react-icons/fa'; // <-- IMPORT ICONS
+import { FaEye, FaEyeSlash } from 'react-icons/fa';
 
 const SignupPage = ({ setToken }) => {
   const [username, setUsername] = useState('');
@@ -12,7 +12,6 @@ const SignupPage = ({ setToken }) => {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  // --- ADDED: State for password visibilities ---
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
@@ -60,6 +59,7 @@ const SignupPage = ({ setToken }) => {
   };
 
   const inputClass = "p-3 text-base border border-vav-accent-primary rounded-md w-full bg-vav-background text-vav-text placeholder-vav-text-secondary focus:outline-none focus:ring-2 focus:ring-vav-accent-secondary";
+  const linkClass = "text-vav-accent-primary hover:text-vav-accent-secondary transition-colors font-semibold";
 
   return (
     <div className="w-full max-w-md mx-auto p-4 flex flex-col items-center justify-center">
@@ -98,7 +98,6 @@ const SignupPage = ({ setToken }) => {
           />
         </div>
         
-        {/* --- MODIFIED: Password input with toggle --- */}
         <div className="relative mb-4">
           <input
             type={showPassword ? 'text' : 'password'}
@@ -118,8 +117,7 @@ const SignupPage = ({ setToken }) => {
           </button>
         </div>
         
-        {/* --- MODIFIED: Confirm Password input with toggle --- */}
-        <div className="relative mb-6">
+        <div className="relative mb-4">
           <input
             type={showConfirmPassword ? 'text' : 'password'}
             placeholder="Confirm Password"
@@ -138,17 +136,30 @@ const SignupPage = ({ setToken }) => {
           </button>
         </div>
 
+        {/* --- NEW: Add the legal text and links --- */}
+        <div className="mb-6 text-center text-xs text-vav-text-secondary">
+          By creating an account, you agree to our{' '}
+          <Link to="/terms-of-use" className={linkClass}>
+            Terms of Use
+          </Link>{' '}
+          and{' '}
+          <Link to="/privacy-policy" className={linkClass}>
+            Privacy Policy
+          </Link>.
+        </div>
+
         <button
           type="submit"
           className="w-full bg-vav-accent-primary hover:bg-vav-accent-secondary text-vav-background font-semibold py-3 px-4 rounded-md shadow-md transition-colors duration-150 ease-in-out"
         >
           Sign Up
         </button>
+
         <p className="mt-6 text-center text-sm text-vav-text-secondary">
           Already have an account?{' '}
           <Link
             to="/login"
-            className="text-vav-accent-primary hover:text-vav-accent-secondary transition-colors"
+            className={linkClass}
           >
             Login
           </Link>

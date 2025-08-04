@@ -20,6 +20,10 @@ import SavedFindsPage from './pages/SavedFindsPage';
 import SavedFindDetailsPage from './pages/SavedFindDetailsPage';
 import ProfilePage from './pages/ProfilePage';
 import FeedPage from './pages/FeedPage';
+// --- NEW: Import the legal pages ---
+import TermsOfUsePage from './pages/TermsOfUsePage';
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
+
 
 // Your main CSS file which now includes Tailwind directives
 import './index.css';
@@ -28,7 +32,7 @@ function App() {
   const [token, setToken] = useState(localStorage.getItem('authToken'));
   const [currentUser, setCurrentUser] = useState(null); 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false); // <-- NEW: State for mobile menu
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const navigate = useNavigate();
   const dropdownRef = useRef(null);
@@ -72,7 +76,7 @@ function App() {
     setCurrentUser(null);
     localStorage.removeItem('authToken');
     setIsDropdownOpen(false);
-    setIsMobileMenuOpen(false); // <-- Close mobile menu on logout
+    setIsMobileMenuOpen(false);
     navigate('/');
   };
 
@@ -195,6 +199,9 @@ function App() {
           <Route path="/signup" element={<SignupPage setToken={setToken} />} />
           <Route path="/discover" element={<DiscoverPage />} />
           <Route path="/profile/:userId" element={<ProfilePage />} />
+          {/* --- NEW: Add the legal routes --- */}
+          <Route path="/terms-of-use" element={<TermsOfUsePage />} />
+          <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
           
           {/* Protected Routes */}
           <Route element={<ProtectedRoute />}>
