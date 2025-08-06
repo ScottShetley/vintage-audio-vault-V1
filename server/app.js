@@ -6,8 +6,6 @@ const mongoose = require ('mongoose');
 const cors = require ('cors');
 const {Storage} = require ('@google-cloud/storage');
 const {GoogleGenerativeAI} = require ('@google/generative-ai');
-const cron = require ('node-cron');
-const axios = require ('axios');
 
 const authRoutes = require ('./routes/authRoutes');
 const audioItemRoutes = require ('./routes/audioItemRoutes');
@@ -154,26 +152,6 @@ app.get ('/api/health-check', (req, res) => {
     .status (200)
     .json ({status: 'UP', message: 'Server is awake and running.'});
 });
-
-// --- FINAL: Self-Ping Cron Job to Prevent Sleep ---
-const selfPingUrl = 'https://vintage-audio-vault.onrender.com/api/health-check';
-
-cron.schedule ('*/14 * * * *', () => {
-  console.log ('CRON JOB: Pinging self to prevent sleep...');
-  axios
-    .get (selfPingUrl)
-    .then (response => {
-      // Corrected log message to be accurate regardless of redirects.
-      console.log (`CRON JOB: Ping successful. Server responded and is awake.`);
-    })
-    .catch (error => {
-      console.error (
-        'CRON JOB: Self-ping failed.',
-        error.response ? error.response.data : error.message
-      );
-    });
-});
-// --- END of Self-Ping Cron Job ---
 
 // Start the server
 app.listen (PORT, () => {
