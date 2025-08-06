@@ -6,8 +6,8 @@ const mongoose = require ('mongoose');
 const cors = require ('cors');
 const {Storage} = require ('@google-cloud/storage');
 const {GoogleGenerativeAI} = require ('@google/generative-ai');
-const cron = require ('node-cron'); // <-- NEW: Import node-cron
-const axios = require ('axios'); // <-- NEW: Import axios
+const cron = require ('node-cron');
+const axios = require ('axios');
 
 const authRoutes = require ('./routes/authRoutes');
 const audioItemRoutes = require ('./routes/audioItemRoutes');
@@ -25,15 +25,10 @@ const allowedOrigins = [
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback (null, true);
-
-    // Check if the origin is in our list
     if (allowedOrigins.indexOf (origin) !== -1) {
       return callback (null, true);
     }
-
-    // If not in the list, block the request
     return callback (
       new Error (
         'The CORS policy for this site does not allow access from the specified Origin.'
@@ -87,7 +82,7 @@ if (gcpClientEmail && gcpPrivateKey && gcpProjectId) {
   try {
     const credentials = {
       client_email: gcpClientEmail,
-      private_key: gcpPrivateKey.replace (/\\n/g, '\n'), // Formats the private key correctly
+      private_key: gcpPrivateKey.replace (/\\n/g, '\n'),
     };
     storage = new Storage ({
       projectId: gcpProjectId,
@@ -155,30 +150,23 @@ app.get ('/', (req, res) => {
  * @access  Public
  */
 app.get ('/api/health-check', (req, res) => {
-  // Simply respond with a success status and a message.
-  // This requires no database calls or heavy processing.
   res
     .status (200)
     .json ({status: 'UP', message: 'Server is awake and running.'});
 });
 
-// --- NEW: Self-Ping Cron Job to Prevent Sleep ---
+// --- FINAL: Self-Ping Cron Job to Prevent Sleep ---
 const selfPingUrl = 'https://vintage-audio-vault.onrender.com/api/health-check';
 
-// Schedule a task to run every 14 minutes.
-// This is to prevent the free Render service from spinning down due to inactivity.
 cron.schedule ('*/14 * * * *', () => {
   console.log ('CRON JOB: Pinging self to prevent sleep...');
   axios
     .get (selfPingUrl)
     .then (response => {
-      console.log (
-        `CRON JOB: Ping successful. Status: ${response.data.status}`
-      );
+      // Corrected log message to be accurate regardless of redirects.
+      console.log (`CRON JOB: Ping successful. Server responded and is awake.`);
     })
     .catch (error => {
-      // Log the error but don't crash the server.
-      // This could happen for various reasons (e.g., network issues, URL change).
       console.error (
         'CRON JOB: Self-ping failed.',
         error.response ? error.response.data : error.message
