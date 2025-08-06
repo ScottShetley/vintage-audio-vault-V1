@@ -6,6 +6,8 @@ const mongoose = require ('mongoose');
 const cors = require ('cors');
 const {Storage} = require ('@google-cloud/storage');
 const {GoogleGenerativeAI} = require ('@google/generative-ai');
+const cron = require ('node-cron'); // <-- NEW: Import node-cron
+const axios = require ('axios'); // <-- NEW: Import axios
 
 const authRoutes = require ('./routes/authRoutes');
 const audioItemRoutes = require ('./routes/audioItemRoutes');
@@ -149,7 +151,7 @@ app.get ('/', (req, res) => {
 
 /**
  * @route   GET /api/health-check
- * @desc    A lightweight endpoint for keep-alive services like UptimeRobot.
+ * @desc    A lightweight endpoint for keep-alive services.
  * @access  Public
  */
 app.get ('/api/health-check', (req, res) => {
@@ -159,6 +161,31 @@ app.get ('/api/health-check', (req, res) => {
     .status (200)
     .json ({status: 'UP', message: 'Server is awake and running.'});
 });
+
+// --- NEW: Self-Ping Cron Job to Prevent Sleep ---
+const selfPingUrl = 'https://vintage-audio-vault.onrender.com/api/health-check';
+
+// Schedule a task to run every 14 minutes.
+// This is to prevent the free Render service from spinning down due to inactivity.
+cron.schedule ('*/14 * * * *', () => {
+  console.log ('CRON JOB: Pinging self to prevent sleep...');
+  axios
+    .get (selfPingUrl)
+    .then (response => {
+      console.log (
+        `CRON JOB: Ping successful. Status: ${response.data.status}`
+      );
+    })
+    .catch (error => {
+      // Log the error but don't crash the server.
+      // This could happen for various reasons (e.g., network issues, URL change).
+      console.error (
+        'CRON JOB: Self-ping failed.',
+        error.response ? error.response.data : error.message
+      );
+    });
+});
+// --- END of Self-Ping Cron Job ---
 
 // Start the server
 app.listen (PORT, () => {
