@@ -10,4 +10,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Ping the health-check endpoint
-        run: curl -s https://your-vav-backend.onrender.com/api/health-check
+        run: curl -s https://vintage-audio-vault-v1-backend.onrender.com/api/health-check
