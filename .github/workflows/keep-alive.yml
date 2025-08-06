@@ -1,0 +1,13 @@
+name: Keep Render Service Alive
+
+on:
+  schedule:
+    # This runs the job every 10 minutes
+    - cron: '*/10 * * * *'
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping the health-check endpoint
+        run: curl -s https://your-vav-backend.onrender.com/api/health-check
