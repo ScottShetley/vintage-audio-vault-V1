@@ -1,25 +1,36 @@
 // client/src/pages/LoginPage.jsx
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react'; // <-- IMPORT useEffect
 import {Link, useNavigate} from 'react-router-dom';
 import axios from 'axios';
-import {FaEye, FaEyeSlash} from 'react-icons/fa'; // <-- IMPORT ICONS
+import {FaEye, FaEyeSlash} from 'react-icons/fa';
 
-// 1. Accept setToken as a prop
 const LoginPage = ({setToken}) => {
   const [email, setEmail] = useState ('');
   const [password, setPassword] = useState ('');
   const [error, setError] = useState ('');
   const navigate = useNavigate ();
-
-  // --- ADDED: State for password visibility ---
   const [showPassword, setShowPassword] = useState (false);
+
+  // --- NEW: Redirect if already logged in ---
+  // This effect runs when the component mounts. It checks for an auth token
+  // in local storage. If one is found, it means the user is already logged in,
+  // and we redirect them to the discover page instead of showing the login form.
+  useEffect (
+    () => {
+      const token = localStorage.getItem ('authToken');
+      if (token) {
+        console.log ('User is already logged in. Redirecting to /discover...');
+        navigate ('/discover');
+      }
+    },
+    [navigate]
+  ); // Dependency array ensures this runs only once on mount
 
   const handleSubmit = async event => {
     event.preventDefault ();
     setError ('');
 
     try {
-      // --- UPDATED: Removed hardcoded URL ---
       const response = await axios.post ('/api/auth/login', {
         email,
         password,
@@ -28,14 +39,11 @@ const LoginPage = ({setToken}) => {
       const receivedToken = response.data.token;
       console.log ('Login successful:', response.data);
 
-      // 2. Call setToken to update the state in App.jsx
       setToken (receivedToken);
-
-      // 3. Use 'authToken' for consistency with App.jsx
       localStorage.setItem ('authToken', receivedToken);
 
       console.log ('Token stored:', localStorage.getItem ('authToken'));
-      navigate ('/dashboard');
+      navigate ('/dashboard'); // Keep this to redirect new logins to the dashboard
     } catch (err) {
       console.error (
         'Login error:',
@@ -70,7 +78,6 @@ const LoginPage = ({setToken}) => {
           className="mb-4 p-3 text-base border border-vav-accent-primary rounded-md w-full bg-vav-background text-vav-text placeholder-vav-text-secondary focus:outline-none focus:ring-2 focus:ring-vav-accent-secondary"
           required
         />
-        {/* --- MODIFIED: Password input with toggle --- */}
         <div className="relative mb-6">
           <input
             type={showPassword ? 'text' : 'password'}
