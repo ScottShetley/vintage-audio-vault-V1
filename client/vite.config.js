@@ -1,28 +1,55 @@
 // C:/Users/david/Desktop/projects/vintageaudiovault/client/vite.config.js
 import {defineConfig} from 'vite';
 import react from '@vitejs/plugin-react';
+import {VitePWA} from 'vite-plugin-pwa'; // <-- IMPORT THE PWA PLUGIN
 
-// https://vitejs.dev/config/
 export default defineConfig ({
-  plugins: [react ()],
+  // The server proxy remains unchanged
   server: {
     proxy: {
-      // When a request is made to /api/* from the frontend,
-      // Vite's dev server will forward it to http://localhost:5000
-      // For example, a frontend request to /api/items/analyze-wild-find
-      // will be proxied to http://localhost:5000/api/items/analyze-wild-find
       '/api': {
-        target: 'http://localhost:5000', // Your backend server address
-        changeOrigin: true, // Recommended for virtual hosted sites and to avoid CORS issues in dev
-        // secure: false, // Set to false if your backend is HTTP (not HTTPS). Usually true by default.
-        // For localhost development with an HTTP backend, this might not be strictly necessary
-        // but can be useful if you encounter SSL-related proxy errors.
-
-        // Optional: rewrite path if your backend API routes don't include the /api prefix
-        // For instance, if your backend expects /items/analyze-wild-find instead of /api/items/analyze-wild-find
-        // you would uncomment and adjust the following:
-        // rewrite: (path) => path.replace(/^\/api/, ''),
+        target: 'http://localhost:5000',
+        changeOrigin: true,
       },
     },
   },
+  // We add the VitePWA plugin here
+  plugins: [
+    react (),
+    VitePWA ({
+      registerType: 'autoUpdate',
+      injectRegister: 'auto',
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+      },
+      manifest: {
+        name: 'Vintage Audio Vault',
+        short_name: 'VAV',
+        description: 'A personal inventory management system for vintage audio enthusiasts.',
+        theme_color: '#1a1a1a',
+        background_color: '#1a1a1a',
+        display: 'standalone',
+        scope: '/',
+        start_url: '/discover', // <-- THE FIX: Sets the correct starting page
+        icons: [
+          {
+            src: 'pwa-192x192.png',
+            sizes: '192x192',
+            type: 'image/png',
+          },
+          {
+            src: 'pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+          },
+          {
+            src: 'pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any maskable',
+          },
+        ],
+      },
+    }),
+  ],
 });
