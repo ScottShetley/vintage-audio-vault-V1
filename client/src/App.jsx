@@ -20,17 +20,16 @@ import SavedFindsPage from './pages/SavedFindsPage';
 import SavedFindDetailsPage from './pages/SavedFindDetailsPage';
 import ProfilePage from './pages/ProfilePage';
 import FeedPage from './pages/FeedPage';
-// --- NEW: Import the legal pages ---
 import TermsOfUsePage from './pages/TermsOfUsePage';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
-
+import UpdatesPage from './pages/UpdatesPage'; // <-- 1. IMPORT THE NEW PAGE
 
 // Your main CSS file which now includes Tailwind directives
 import './index.css';
 
 function App() {
   const [token, setToken] = useState(localStorage.getItem('authToken'));
-  const [currentUser, setCurrentUser] = useState(null); 
+  const [currentUser, setCurrentUser] = useState(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -125,6 +124,7 @@ function App() {
                     <div className="absolute right-0 mt-2 w-48 bg-vav-content-card rounded-md shadow-lg py-1 z-10">
                       <Link to={`/profile/${currentUser._id}`} onClick={() => setIsDropdownOpen(false)} className="block px-4 py-2 text-sm text-vav-text hover:bg-vav-background-alt font-semibold">My Profile</Link>
                       <Link to="/saved-finds" onClick={() => setIsDropdownOpen(false)} className="block px-4 py-2 text-sm text-vav-text hover:bg-vav-background-alt">Saved Finds</Link>
+                      <Link to="/updates" onClick={() => setIsDropdownOpen(false)} className="block px-4 py-2 text-sm text-vav-text hover:bg-vav-background-alt">Updates</Link> {/* <-- 2. ADD LINK TO DROPDOWN */}
                       <Link to="/instructions" onClick={() => setIsDropdownOpen(false)} className="block px-4 py-2 text-sm text-vav-text hover:bg-vav-background-alt">Instructions</Link>
                       <button onClick={handleLogout} className="w-full text-left block px-4 py-2 text-sm text-vav-text hover:bg-vav-background-alt">
                         Logout
@@ -173,6 +173,7 @@ function App() {
                             <li className="w-full border-t border-vav-background-alt my-2"></li>
                             {currentUser && <li><Link to={`/profile/${currentUser._id}`} onClick={() => setIsMobileMenuOpen(false)} className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">My Profile</Link></li>}
                             <li><Link to="/saved-finds" onClick={() => setIsMobileMenuOpen(false)} className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Saved Finds</Link></li>
+                            <li><Link to="/updates" onClick={() => setIsMobileMenuOpen(false)} className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Updates</Link></li> {/* <-- 3. ADD LINK TO MOBILE MENU */}
                             <li><Link to="/instructions" onClick={() => setIsMobileMenuOpen(false)} className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Instructions</Link></li>
                             <li><button onClick={handleLogout} className="text-lg font-semibold text-vav-accent-primary hover:text-vav-text transition-colors">Logout</button></li>
                         </>
@@ -199,12 +200,12 @@ function App() {
           <Route path="/signup" element={<SignupPage setToken={setToken} />} />
           <Route path="/discover" element={<DiscoverPage />} />
           <Route path="/profile/:userId" element={<ProfilePage />} />
-          {/* --- NEW: Add the legal routes --- */}
           <Route path="/terms-of-use" element={<TermsOfUsePage />} />
           <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
           
           {/* Protected Routes */}
           <Route element={<ProtectedRoute />}>
+            <Route path="/updates" element={<UpdatesPage />} /> {/* <-- 4. ADD THE ROUTE */}
             <Route path="/feed" element={<FeedPage />} />
             <Route path="/dashboard" element={<DashboardPage token={token} />} />
             <Route path="/add-item" element={<AddItemPage />} />
