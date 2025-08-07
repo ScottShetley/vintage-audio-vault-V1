@@ -45,6 +45,79 @@ const UpdatesPage = () => {
         Logged-in users who close the app and return later will no longer be shown the login page. They are now correctly redirected to the Discover page upon returning.
       </UpdateEntry>
 
+      {/* --- August 6, 2025 --- */}
+      <UpdateEntry
+        date="August 6, 2025"
+        tag="FIX"
+        tagColor="bg-green-800 text-green-100"
+      >
+        Resolved the "cold start" issue on the production server by implementing a robust, external keep-alive system using a GitHub Actions workflow. [cite_start]This ensures the app is always responsive. [cite: 1050, 1052]
+      </UpdateEntry>
+
+      {/* --- August 4, 2025 --- */}
+      <UpdateEntry
+        date="August 4, 2025"
+        tag="NEW"
+        tagColor="bg-purple-800 text-purple-100"
+      >
+        [cite_start]Completed the full application test plan, verifying the stability and functionality of all major features. [cite: 958]
+      </UpdateEntry>
+      <UpdateEntry
+        date="August 4, 2025"
+        tag="SECURITY"
+        tagColor="bg-red-800 text-red-100"
+      >
+        [cite_start]Secured the production Google Cloud API Key by applying IP address restrictions. [cite: 959]
+      </UpdateEntry>
+
+      {/* --- August 3, 2025 --- */}
+      <UpdateEntry
+        date="August 3, 2025"
+        tag="NEW"
+        tagColor="bg-purple-800 text-purple-100"
+      >
+        Users can now select a "Cover Photo" for their items from the Edit page. [cite_start]This image is used as the thumbnail on all feed and discovery pages. [cite: 832, 836]
+      </UpdateEntry>
+      <UpdateEntry
+        date="August 3, 2025"
+        tag="IMPROVEMENT"
+        tagColor="bg-blue-800 text-blue-100"
+      >
+        [cite_start]Implemented a fully responsive "hamburger" menu for improved navigation on mobile devices. [cite: 831]
+      </UpdateEntry>
+
+      {/* --- August 1, 2025 --- */}
+      <UpdateEntry
+        date="August 1, 2025"
+        tag="NEW"
+        tagColor="bg-purple-800 text-purple-100"
+      >
+        Implemented the AI "Value with a Warning" feature. [cite_start]The AI now provides a valuation estimate along with a "High," "Medium," or "Low" confidence score, which is displayed in the UI with corresponding colors and icons. [cite: 705, 707]
+      </UpdateEntry>
+      <UpdateEntry
+        date="August 1, 2025"
+        tag="FIX"
+        tagColor="bg-green-800 text-green-100"
+      >
+        [cite_start]Fixed multiple production deployment issues, including a server crash related to Google Cloud authentication and 404 errors when refreshing pages. [cite: 702, 704]
+      </UpdateEntry>
+
+      {/* --- July 31, 2025 --- */}
+      <UpdateEntry
+        date="July 31, 2025"
+        tag="FIX"
+        tagColor="bg-green-800 text-green-100"
+      >
+        Resolved a critical and complex bug that prevented users from reliably adding or deleting photos when editing an item. [cite_start]The root cause was identified as special characters in filenames creating broken URLs, which was resolved with filename sanitization. [cite: 623, 624, 625]
+      </UpdateEntry>
+      <UpdateEntry
+        date="July 31, 2025"
+        tag="NEW"
+        tagColor="bg-purple-800 text-purple-100"
+      >
+        [cite_start]The application was successfully deployed to a live production environment on Render. [cite: 617]
+      </UpdateEntry>
+
       <div className="mt-10 text-center">
         <Link
           to="/dashboard"
