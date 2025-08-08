@@ -24,7 +24,6 @@ import TermsOfUsePage from './pages/TermsOfUsePage';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
 import UpdatesPage from './pages/UpdatesPage';
 
-// --- 1. IMPORT THE LOGO ---
 import VavLogo from './assets/vav-logo.png'; 
 
 // Your main CSS file which now includes Tailwind directives
@@ -100,9 +99,12 @@ function App() {
   return (
     <div className="min-h-screen bg-vav-background text-vav-text font-sans flex flex-col items-center p-5 box-border">
       <nav className="w-full max-w-full md:max-w-4xl lg:max-w-6xl mb-10 py-4 border-b border-vav-content-card flex justify-between items-center mx-auto relative">
-        {/* --- 2. REPLACE TEXT LINK WITH IMAGE LINK --- */}
-        <Link to={token ? "/dashboard" : "/"} className="flex items-center">
+        {/* --- MODIFIED: Combined logo and title --- */}
+        <Link to={token ? "/dashboard" : "/"} className="flex items-center gap-3 no-underline">
           <img src={VavLogo} alt="Vintage Audio Vault Logo" className="h-12 w-auto" />
+          <span className="text-2xl font-bold text-vav-accent-primary hidden sm:inline">
+            Vintage Audio Vault
+          </span>
         </Link>
         
         {/* --- DESKTOP NAVIGATION --- */}
