@@ -22,7 +22,10 @@ import ProfilePage from './pages/ProfilePage';
 import FeedPage from './pages/FeedPage';
 import TermsOfUsePage from './pages/TermsOfUsePage';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
-import UpdatesPage from './pages/UpdatesPage'; // <-- 1. IMPORT THE NEW PAGE
+import UpdatesPage from './pages/UpdatesPage';
+
+// --- 1. IMPORT THE LOGO ---
+import VavLogo from './assets/vav-logo.png'; 
 
 // Your main CSS file which now includes Tailwind directives
 import './index.css';
@@ -97,8 +100,9 @@ function App() {
   return (
     <div className="min-h-screen bg-vav-background text-vav-text font-sans flex flex-col items-center p-5 box-border">
       <nav className="w-full max-w-full md:max-w-4xl lg:max-w-6xl mb-10 py-4 border-b border-vav-content-card flex justify-between items-center mx-auto relative">
-        <Link to={token ? "/dashboard" : "/"} className="text-2xl font-bold text-vav-accent-primary no-underline">
-          Vintage Audio Vault
+        {/* --- 2. REPLACE TEXT LINK WITH IMAGE LINK --- */}
+        <Link to={token ? "/dashboard" : "/"} className="flex items-center">
+          <img src={VavLogo} alt="Vintage Audio Vault Logo" className="h-12 w-auto" />
         </Link>
         
         {/* --- DESKTOP NAVIGATION --- */}
@@ -124,7 +128,7 @@ function App() {
                     <div className="absolute right-0 mt-2 w-48 bg-vav-content-card rounded-md shadow-lg py-1 z-10">
                       <Link to={`/profile/${currentUser._id}`} onClick={() => setIsDropdownOpen(false)} className="block px-4 py-2 text-sm text-vav-text hover:bg-vav-background-alt font-semibold">My Profile</Link>
                       <Link to="/saved-finds" onClick={() => setIsDropdownOpen(false)} className="block px-4 py-2 text-sm text-vav-text hover:bg-vav-background-alt">Saved Finds</Link>
-                      <Link to="/updates" onClick={() => setIsDropdownOpen(false)} className="block px-4 py-2 text-sm text-vav-text hover:bg-vav-background-alt">Updates</Link> {/* <-- 2. ADD LINK TO DROPDOWN */}
+                      <Link to="/updates" onClick={() => setIsDropdownOpen(false)} className="block px-4 py-2 text-sm text-vav-text hover:bg-vav-background-alt">Updates</Link>
                       <Link to="/instructions" onClick={() => setIsDropdownOpen(false)} className="block px-4 py-2 text-sm text-vav-text hover:bg-vav-background-alt">Instructions</Link>
                       <button onClick={handleLogout} className="w-full text-left block px-4 py-2 text-sm text-vav-text hover:bg-vav-background-alt">
                         Logout
@@ -173,7 +177,7 @@ function App() {
                             <li className="w-full border-t border-vav-background-alt my-2"></li>
                             {currentUser && <li><Link to={`/profile/${currentUser._id}`} onClick={() => setIsMobileMenuOpen(false)} className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">My Profile</Link></li>}
                             <li><Link to="/saved-finds" onClick={() => setIsMobileMenuOpen(false)} className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Saved Finds</Link></li>
-                            <li><Link to="/updates" onClick={() => setIsMobileMenuOpen(false)} className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Updates</Link></li> {/* <-- 3. ADD LINK TO MOBILE MENU */}
+                            <li><Link to="/updates" onClick={() => setIsMobileMenuOpen(false)} className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Updates</Link></li>
                             <li><Link to="/instructions" onClick={() => setIsMobileMenuOpen(false)} className="text-lg font-semibold text-vav-text-secondary hover:text-vav-text transition-colors">Instructions</Link></li>
                             <li><button onClick={handleLogout} className="text-lg font-semibold text-vav-accent-primary hover:text-vav-text transition-colors">Logout</button></li>
                         </>
@@ -205,7 +209,7 @@ function App() {
           
           {/* Protected Routes */}
           <Route element={<ProtectedRoute />}>
-            <Route path="/updates" element={<UpdatesPage />} /> {/* <-- 4. ADD THE ROUTE */}
+            <Route path="/updates" element={<UpdatesPage />} />
             <Route path="/feed" element={<FeedPage />} />
             <Route path="/dashboard" element={<DashboardPage token={token} />} />
             <Route path="/add-item" element={<AddItemPage />} />
