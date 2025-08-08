@@ -21,7 +21,8 @@ const SavedFindsPage = () => {
       }
 
       try {
-        const response = await axios.get('http://localhost:5000/api/wild-finds', {
+        // --- FIX: Replaced hardcoded localhost URL with the correct relative path ---
+        const response = await axios.get('/api/wild-finds', {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -71,7 +72,6 @@ const SavedFindsPage = () => {
                 {find.findType}
               </div>
 
-              {/* --- FIXED: Corrected the URL path in the 'to' prop --- */}
               <Link to={`/saved-finds/${find._id}`} className="flex flex-col h-full p-4">
                 <img
                   src={find.imageUrl}
