@@ -1,58 +1,53 @@
 // client/src/pages/LoginPage.jsx
-import React, {useState, useEffect} from 'react'; // <-- IMPORT useEffect
-import {Link, useNavigate} from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import {FaEye, FaEyeSlash} from 'react-icons/fa';
+import { FaEye, FaEyeSlash } from 'react-icons/fa';
+import { useAuth } from '../contexts/AuthContext';
 
-const LoginPage = ({setToken}) => {
-  const [email, setEmail] = useState ('');
-  const [password, setPassword] = useState ('');
-  const [error, setError] = useState ('');
-  const navigate = useNavigate ();
-  const [showPassword, setShowPassword] = useState (false);
+const LoginPage = () => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  
+  const navigate = useNavigate();
+  const { token, login } = useAuth();
 
-  // --- NEW: Redirect if already logged in ---
-  // This effect runs when the component mounts. It checks for an auth token
-  // in local storage. If one is found, it means the user is already logged in,
-  // and we redirect them to the discover page instead of showing the login form.
-  useEffect (
-    () => {
-      const token = localStorage.getItem ('authToken');
-      if (token) {
-        console.log ('User is already logged in. Redirecting to /discover...');
-        navigate ('/discover');
-      }
-    },
-    [navigate]
-  ); // Dependency array ensures this runs only once on mount
+  useEffect(() => {
+    if (token) {
+      console.log('User is already logged in. Redirecting to /discover...');
+      navigate('/discover');
+    }
+  }, [token, navigate]);
 
   const handleSubmit = async event => {
-    event.preventDefault ();
-    setError ('');
+    event.preventDefault();
+    setError('');
 
     try {
-      const response = await axios.post ('/api/auth/login', {
+      const response = await axios.post('/api/auth/login', {
         email,
         password,
       });
 
-      const receivedToken = response.data.token;
-      console.log ('Login successful:', response.data);
-
-      setToken (receivedToken);
-      localStorage.setItem ('authToken', receivedToken);
-
-      console.log ('Token stored:', localStorage.getItem ('authToken'));
-      navigate ('/dashboard'); // Keep this to redirect new logins to the dashboard
+      console.log('Login successful:', response.data);
+      
+      // Use the login function from context
+      if (response.data.user && response.data.token) {
+        login(response.data.user, response.data.token);
+        navigate('/dashboard'); // Keep this to redirect new logins to the dashboard
+      } else {
+         setError('Login response was invalid.');
+      }
+      
     } catch (err) {
-      console.error (
+      console.error(
         'Login error:',
         err.response ? err.response.data : err.message
       );
-      setError (
-        err.response && err.response.data && err.response.data.message
-          ? err.response.data.message
-          : 'Login failed. Please check your credentials.'
+      setError(
+        err.response?.data?.message || 'Login failed. Please check your credentials.'
       );
     }
   };
@@ -74,7 +69,7 @@ const LoginPage = ({setToken}) => {
           type="email"
           placeholder="Email"
           value={email}
-          onChange={e => setEmail (e.target.value)}
+          onChange={e => setEmail(e.target.value)}
           className="mb-4 p-3 text-base border border-vav-accent-primary rounded-md w-full bg-vav-background text-vav-text placeholder-vav-text-secondary focus:outline-none focus:ring-2 focus:ring-vav-accent-secondary"
           required
         />
@@ -83,13 +78,13 @@ const LoginPage = ({setToken}) => {
             type={showPassword ? 'text' : 'password'}
             placeholder="Password"
             value={password}
-            onChange={e => setPassword (e.target.value)}
+            onChange={e => setPassword(e.target.value)}
             className="p-3 text-base border border-vav-accent-primary rounded-md w-full bg-vav-background text-vav-text placeholder-vav-text-secondary focus:outline-none focus:ring-2 focus:ring-vav-accent-secondary"
             required
           />
           <button
             type="button"
-            onClick={() => setShowPassword (!showPassword)}
+            onClick={() => setShowPassword(!showPassword)}
             className="absolute inset-y-0 right-0 px-3 flex items-center text-vav-text-secondary hover:text-vav-accent-primary"
             aria-label={showPassword ? 'Hide password' : 'Show password'}
           >

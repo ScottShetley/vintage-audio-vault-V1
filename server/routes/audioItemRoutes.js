@@ -93,6 +93,7 @@ router.get('/discover', protect, async (req, res) => {
       username: item.user?.username,
       userId: item.user?._id,
       isFollowing: followingIds.has(item.user?._id.toString()),
+      itemSourceType: 'CollectionItem', // <-- ADDED FOR CLARITY
     }));
 
     const normalizedWildFinds = wildFinds.map(find => {
@@ -107,7 +108,7 @@ router.get('/discover', protect, async (req, res) => {
         id: find._id,
         title: title,
         imageUrl: find.imageUrl,
-        tag: find.findType,
+        itemSourceType: find.findType, // <-- RENAMED FROM 'tag' FOR CONSISTENCY
         detailPath: `/saved-finds/${find._id}`,
         createdAt: find.createdAt,
         username: find.userId?.username,
@@ -505,7 +506,7 @@ router.post(
           : textAnalysis.extractedMake;
       const identifiedModel =
         visualAnalysis.model !== 'Model Not Clearly Identifiable'
-          ? visualAnalysis.model
+          ? visual.model
           : textAnalysis.extractedModel;
 
       const valueInsight = await getAiValueInsight(

@@ -1,9 +1,18 @@
 // client/src/components/ItemCard.jsx
 import React from 'react';
 import {Link} from 'react-router-dom';
-import {IoPricetag, IoSwapHorizontal} from 'react-icons/io5';
+import {
+  IoPricetag,
+  IoSwapHorizontal,
+  IoSearch,
+  IoAnalytics,
+  IoStar,
+} from 'react-icons/io5';
+import {useAuth} from '../contexts/AuthContext';
 
 const ItemCard = ({item}) => {
+  const {user} = useAuth (); // Get the currently logged-in user
+
   const placeholderImageUrl =
     'https://placehold.co/150x150/2C2C2C/E0E0E0?text=No+Image';
 
@@ -18,10 +27,6 @@ const ItemCard = ({item}) => {
       Following
     </span>
   );
-
-  // --- TEMPORARY DIAGNOSTIC LOG ---
-  // This will show us the exact data the card is receiving.
-  console.log ('ItemCard received item:', item);
 
   return (
     <div
@@ -41,6 +46,27 @@ const ItemCard = ({item}) => {
           />
         </Link>
 
+        {/* --- Source & Ownership Tags (Top Left) --- */}
+        <div className="absolute top-2 left-2 flex flex-col items-start gap-y-2">
+          {user &&
+            item.userId === user._id &&
+            <div className="text-xs font-bold px-2 py-1 rounded-full text-black bg-yellow-400 flex items-center">
+              <IoStar className="mr-1" />
+              <span>My Collection</span>
+            </div>}
+          {item.itemSourceType === 'Wild Find' &&
+            <div className="text-xs font-bold px-2 py-1 rounded-full text-white bg-amber-600 flex items-center">
+              <IoSearch className="mr-1" />
+              <span>Wild Find</span>
+            </div>}
+          {item.itemSourceType === 'Ad Analysis' &&
+            <div className="text-xs font-bold px-2 py-1 rounded-full text-white bg-indigo-600 flex items-center">
+              <IoAnalytics className="mr-1" />
+              <span>Ad Analysis</span>
+            </div>}
+        </div>
+
+        {/* --- Status Tags (Top Right) --- */}
         <div className="absolute top-2 right-2 flex flex-col items-end gap-y-2">
           {item.isForSale &&
             <div className="text-xs font-bold px-2 py-1 rounded-full text-white bg-green-600 flex items-center">
@@ -63,8 +89,7 @@ const ItemCard = ({item}) => {
           item.userId &&
           <div className="text-xs text-center text-vav-text-secondary mt-1 mb-2 flex items-center justify-center">
             <span>
-              by
-              {' '}
+              by{' '}
               <Link
                 to={`/profile/${item.userId}`}
                 className="hover:underline hover:text-vav-accent-secondary transition-colors"

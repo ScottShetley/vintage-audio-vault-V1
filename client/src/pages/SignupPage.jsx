@@ -3,17 +3,19 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
+import { useAuth } from '../contexts/AuthContext';
 
-const SignupPage = ({ setToken }) => {
+const SignupPage = () => {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
-  const navigate = useNavigate();
-
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  
+  const navigate = useNavigate();
+  const { login } = useAuth();
 
   const handleSubmit = async event => {
     event.preventDefault();
@@ -30,23 +32,22 @@ const SignupPage = ({ setToken }) => {
     }
 
     try {
-      const response = await axios.post(
-        'http://localhost:5000/api/auth/register',
-        {
-          username,
-          email,
-          password,
-        }
-      );
+      const response = await axios.post('/api/auth/register', { // <-- Corrected URL
+        username,
+        email,
+        password,
+      });
 
-      const receivedToken = response.data.token;
       console.log('Registration successful:', response.data);
 
-      setToken(receivedToken);
-      localStorage.setItem('authToken', receivedToken);
-
-      console.log('Token stored, user logged in.');
-      navigate('/dashboard');
+      // Use the login function from context
+      if (response.data.user && response.data.token) {
+        login(response.data.user, response.data.token);
+        navigate('/dashboard');
+      } else {
+        setError('Registration response was invalid.');
+      }
+      
     } catch (err) {
       console.error(
         'Registration error:',
@@ -136,7 +137,6 @@ const SignupPage = ({ setToken }) => {
           </button>
         </div>
 
-        {/* --- NEW: Add the legal text and links --- */}
         <div className="mb-6 text-center text-xs text-vav-text-secondary">
           By creating an account, you agree to our{' '}
           <Link to="/terms-of-use" className={linkClass}>
