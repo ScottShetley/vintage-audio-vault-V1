@@ -28,6 +28,31 @@ const UpdatesPage = () => {
         A log of new features, improvements, and bug fixes for our alpha testers.
       </p>
 
+      {/* --- August 11, 2025 --- */}
+      <UpdateEntry
+        date="August 11, 2025"
+        tag="NEW"
+        tagColor="bg-purple-800 text-purple-100"
+      >
+        Implemented several new tags on item cards for better context in feeds. This includes 'Wild Find' and 'Ad Analysis' tags, as well as a special 'My Collection' tag that is only visible to the item's owner.
+      </UpdateEntry>
+
+      <UpdateEntry
+        date="August 11, 2025"
+        tag="IMPROVEMENT"
+        tagColor="bg-blue-800 text-blue-100"
+      >
+        Refactored the entire application's authentication system to use a centralized React Context. This improves state management, enhances stability, and makes user data reliably available throughout the app.
+      </UpdateEntry>
+
+      <UpdateEntry
+        date="August 11, 2025"
+        tag="FIX"
+        tagColor="bg-green-800 text-green-100"
+      >
+        Fixed a critical regression bug on the Dashboard page where items were not loading. The page has been updated to work with the new authentication system.
+      </UpdateEntry>
+
       {/* --- August 8, 2025 --- */}
       <UpdateEntry
         date="August 8, 2025"

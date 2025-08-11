@@ -1,9 +1,10 @@
 // client/src/App.jsx
 import React, { useState, useEffect, useRef } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, useNavigate } from 'react-router-dom';
+// BrowserRouter is no longer needed here, but the other hooks are
+import { Routes, Route, Link, useNavigate } from 'react-router-dom';
 
 // Import Auth Provider & Hook
-import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { useAuth } from './contexts/AuthContext';
 
 // Import your page components
 import LoginPage from './pages/LoginPage';
@@ -26,7 +27,7 @@ import TermsOfUsePage from './pages/TermsOfUsePage';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
 import UpdatesPage from './pages/UpdatesPage';
 
-import VavLogo from './assets/vav-logo.png'; 
+import VavLogo from './assets/vav-logo.png';
 
 import './index.css';
 
@@ -197,12 +198,5 @@ function App() {
   );
 }
 
-const AppWrapper = () => (
-  <Router>
-    <AuthProvider>
-      <App />
-    </AuthProvider>
-  </Router>
-);
-
-export default AppWrapper;
+// The AppWrapper is no longer needed here, so we export App directly.
+export default App;

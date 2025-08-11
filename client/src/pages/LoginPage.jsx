@@ -33,10 +33,11 @@ const LoginPage = () => {
 
       console.log('Login successful:', response.data);
       
-      // Use the login function from context
-      if (response.data.user && response.data.token) {
-        login(response.data.user, response.data.token);
-        navigate('/dashboard'); // Keep this to redirect new logins to the dashboard
+      // --- CORRECTED LOGIC ---
+      // Check for the user object inside response.data.data
+      if (response.data.data.user && response.data.token) {
+        login(response.data.data.user, response.data.token);
+        navigate('/dashboard');
       } else {
          setError('Login response was invalid.');
       }

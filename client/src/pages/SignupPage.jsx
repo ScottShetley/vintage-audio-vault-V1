@@ -32,7 +32,7 @@ const SignupPage = () => {
     }
 
     try {
-      const response = await axios.post('/api/auth/register', { // <-- Corrected URL
+      const response = await axios.post('/api/auth/register', {
         username,
         email,
         password,
@@ -40,9 +40,10 @@ const SignupPage = () => {
 
       console.log('Registration successful:', response.data);
 
-      // Use the login function from context
-      if (response.data.user && response.data.token) {
-        login(response.data.user, response.data.token);
+      // --- CORRECTED LOGIC ---
+      // Check for the user object inside response.data.data
+      if (response.data.data.user && response.data.token) {
+        login(response.data.data.user, response.data.token);
         navigate('/dashboard');
       } else {
         setError('Registration response was invalid.');
