@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext'; // <-- IMPORT a new hook
 
 const tagColors = {
   'My Collection': 'bg-purple-600',
@@ -10,7 +11,8 @@ const tagColors = {
   'Ad Analysis': 'bg-blue-600',
 };
 
-const DashboardPage = ({ token }) => {
+const DashboardPage = () => { // <-- REMOVE token from props
+  const { token } = useAuth(); // <-- GET token from the context
   const navigate = useNavigate();
   const [allItems, setAllItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -34,6 +36,8 @@ const DashboardPage = ({ token }) => {
       } catch (err) {
         console.error('Failed to load dashboard data:', err);
         if (err.response && (err.response.status === 401 || err.response.status === 403)) {
+          // The logout function from context could be used here in the future,
+          // but for now, this existing logic is fine.
           localStorage.removeItem('authToken');
           navigate('/login');
         } else {
@@ -47,6 +51,8 @@ const DashboardPage = ({ token }) => {
     if (token) {
       fetchDashboardData();
     } else {
+      // If there's no token, don't try to fetch.
+      // This handles the case where a user logs out.
       setAllItems([]);
       setLoading(false);
     }
@@ -147,7 +153,6 @@ const DashboardPage = ({ token }) => {
                 </h3>
                 {item.username && item.userId && (
                   <p className="text-xs text-center text-vav-text-secondary mt-1 mb-2">
-                     {/* The link to the user's own profile is correctly rendered */}
                     by <Link to={`/profile/${item.userId}`} className="hover:underline hover:text-vav-accent-secondary transition-colors">{item.username}</Link>
                   </p>
                 )}
